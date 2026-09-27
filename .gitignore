@@ -11,3 +11,4 @@ dist/
 .DS_Store
 *.log
 healthcare.db
+AI_CONTEXT.md
