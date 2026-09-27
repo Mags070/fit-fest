@@ -10,7 +10,7 @@
 
 ```powershell
 cd backend
-& "C:\Users\Pranav\AppData\Local\Programs\Python\Python312\python.exe" -m uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 # API docs → http://localhost:8000/docs
 ```
 
@@ -18,7 +18,8 @@ cd backend
 
 ```powershell
 cd backend
-& "C:\Users\Pranav\AppData\Local\Programs\Python\Python312\python.exe" ..\data\seed_data.py
+cd data
+seed_data.py
 ```
 
 ### 3. Frontend
