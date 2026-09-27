@@ -8,34 +8,39 @@ import React, { useState } from 'react'
  */
 
 export function AppointmentTrendChart({
-  data = [
-    { day: 'Mon', scheduled: 4, completed: 3 },
-    { day: 'Tue', scheduled: 7, completed: 6 },
-    { day: 'Wed', scheduled: 5, completed: 5 },
-    { day: 'Thu', scheduled: 9, completed: 7 },
-    { day: 'Fri', scheduled: 8, completed: 8 },
-    { day: 'Sat', scheduled: 3, completed: 3 },
-    { day: 'Sun', scheduled: 1, completed: 1 },
-  ],
+  data,
   height = 180,
 }) {
   const [activePoint, setActivePoint] = useState(null)
+
+  // Use dynamic data if provided; default to zero-initialized week if empty
+  const chartData = (data && data.length > 0)
+    ? data
+    : [
+        { day: 'Mon', day_full: 'Monday', scheduled: 0, completed: 0 },
+        { day: 'Tue', day_full: 'Tuesday', scheduled: 0, completed: 0 },
+        { day: 'Wed', day_full: 'Wednesday', scheduled: 0, completed: 0 },
+        { day: 'Thu', day_full: 'Thursday', scheduled: 0, completed: 0 },
+        { day: 'Fri', day_full: 'Friday', scheduled: 0, completed: 0 },
+        { day: 'Sat', day_full: 'Saturday', scheduled: 0, completed: 0 },
+        { day: 'Sun', day_full: 'Sunday', scheduled: 0, completed: 0 },
+      ]
 
   const width = 500
   const paddingX = 40
   const paddingY = 25
 
-  const maxVal = Math.max(...data.map(d => Math.max(d.scheduled, d.completed)), 10)
+  const maxVal = Math.max(...chartData.map(d => Math.max(d.scheduled || 0, d.completed || 0)), 5)
 
-  const getX = (i) => paddingX + (i / (data.length - 1)) * (width - paddingX * 2)
-  const getY = (val) => height - paddingY - (val / maxVal) * (height - paddingY * 2)
+  const getX = (i) => paddingX + (i / Math.max(chartData.length - 1, 1)) * (width - paddingX * 2)
+  const getY = (val) => height - paddingY - ((val || 0) / maxVal) * (height - paddingY * 2)
 
   // Build SVG path points for scheduled
-  const scheduledPoints = data.map((d, i) => `${getX(i)},${getY(d.scheduled)}`).join(' ')
-  const completedPoints = data.map((d, i) => `${getX(i)},${getY(d.completed)}`).join(' ')
+  const scheduledPoints = chartData.map((d, i) => `${getX(i)},${getY(d.scheduled)}`).join(' ')
+  const completedPoints = chartData.map((d, i) => `${getX(i)},${getY(d.completed)}`).join(' ')
 
-  const scheduledArea = `${getX(0)},${height - paddingY} ${scheduledPoints} ${getX(data.length - 1)},${height - paddingY}`
-  const completedArea = `${getX(0)},${height - paddingY} ${completedPoints} ${getX(data.length - 1)},${height - paddingY}`
+  const scheduledArea = `${getX(0)},${height - paddingY} ${scheduledPoints} ${getX(chartData.length - 1)},${height - paddingY}`
+  const completedArea = `${getX(0)},${height - paddingY} ${completedPoints} ${getX(chartData.length - 1)},${height - paddingY}`
 
   return (
     <div className="chart-card">
@@ -102,7 +107,7 @@ export function AppointmentTrendChart({
           />
 
           {/* Points */}
-          {data.map((d, i) => {
+          {chartData.map((d, i) => {
             const sx = getX(i)
             const sy = getY(d.scheduled)
             return (
@@ -141,7 +146,9 @@ export function AppointmentTrendChart({
               top: `${(activePoint.y / height) * 100}%`,
             }}
           >
-            <strong>{activePoint.day}</strong>: {activePoint.scheduled} scheduled, {activePoint.completed} completed
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>{activePoint.day_full || activePoint.day}</div>
+            <div style={{ color: '#3b82f6', fontSize: 11.5 }}>Scheduled: {activePoint.scheduled}</div>
+            <div style={{ color: '#10b981', fontSize: 11.5 }}>Completed: {activePoint.completed}</div>
           </div>
         )}
       </div>
@@ -150,14 +157,15 @@ export function AppointmentTrendChart({
 }
 
 export function AcuityDonutChart({
-  routine = 12,
-  urgent = 5,
-  critical = 2,
+  routine = 0,
+  urgent = 0,
+  critical = 0,
 }) {
-  const total = routine + urgent + critical || 1
-  const routinePct = Math.round((routine / total) * 100)
-  const urgentPct = Math.round((urgent / total) * 100)
-  const criticalPct = Math.max(0, 100 - routinePct - urgentPct)
+  const total = routine + urgent + critical
+  const safeTotal = total > 0 ? total : 1
+  const routinePct = total > 0 ? Math.round((routine / total) * 100) : 0
+  const urgentPct = total > 0 ? Math.round((urgent / total) * 100) : 0
+  const criticalPct = total > 0 ? Math.max(0, 100 - routinePct - urgentPct) : 0
 
   const size = 130
   const strokeWidth = 16
@@ -165,13 +173,13 @@ export function AcuityDonutChart({
   const circumference = 2 * Math.PI * radius
 
   const routineOffset = 0
-  const routineDash = (routine / total) * circumference
+  const routineDash = (routine / safeTotal) * circumference
 
   const urgentOffset = -routineDash
-  const urgentDash = (urgent / total) * circumference
+  const urgentDash = (urgent / safeTotal) * circumference
 
   const criticalOffset = -(routineDash + urgentDash)
-  const criticalDash = (critical / total) * circumference
+  const criticalDash = (critical / safeTotal) * circumference
 
   return (
     <div className="chart-card">
@@ -276,8 +284,8 @@ export function DoctorWorkloadChart({ doctors = [] }) {
           </div>
         ) : (
           displayDocs.map((doc, idx) => {
-            const count = doc.appointment_count ?? (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
-            const maxVal = Math.max(...displayDocs.map(d => d.appointment_count || 0), 10)
+            const count = doc.appointment_count || 0
+            const maxVal = Math.max(...displayDocs.map(d => d.appointment_count || 0), 1)
             const pct = Math.min(100, Math.round((count / maxVal) * 100))
 
             return (

@@ -51,6 +51,13 @@ def patch(path, data):
         return json.loads(r.read())
 
 
+def delete(path):
+    req = urllib.request.Request(f"{BASE}{path}", method="DELETE")
+    with urllib.request.urlopen(req) as r:
+        return r.status
+
+
+
 print("\n=== Healthcare Coordinator Doctor Availability & System Tests ===\n")
 
 # Health
@@ -490,6 +497,183 @@ finally:
             pass
     print("Cleanup completed.")
 
+# =====================================================================
+# DYNAMIC DASHBOARD & APPOINTMENT ANALYTICS (Tests 1-10)
+# =====================================================================
+print("\n" + "="*50)
+print("=== DYNAMIC DASHBOARD & APPOINTMENT ANALYTICS TEST SUITE ===")
+print("="*50 + "\n")
+
+dash_cleanup_patients = []
+dash_cleanup_amb = []
+dash_cleanup_appts = []
+
+try:
+    # ── TEST 1: Database contains patients. Patient count matches database ──
+    print("\nDASH TEST 1: Patient count matches database records:")
+    all_pts = get("/api/patients/")
+    dash_stats1 = get("/api/dashboard/stats")
+    check("Dashboard endpoint returns total_patients", "total_patients" in dash_stats1)
+    check("Dashboard total_patients matches actual database patient count",
+          dash_stats1["total_patients"] == len(all_pts))
+    check("Structured patients.registered matches total_patients",
+          dash_stats1["patients"]["registered"] == len(all_pts))
+
+    # ── TEST 2: Create a new patient -> Registered Patients increases ──
+    print("\nDASH TEST 2: Create new patient -> Registered Patients increases dynamically:")
+    new_pt = post("/api/patients/", {
+        "name": "Dynamic Dashboard Test Patient",
+        "age": 42,
+        "gender": "Female",
+        "phone": "9998881234",
+        "blood_group": "AB+",
+        "location": "Baner"
+    })
+    dash_cleanup_patients.append(new_pt["id"])
+    dash_stats2 = get("/api/dashboard/stats")
+    check("Dashboard patient count incremented by 1 after patient registration",
+          dash_stats2["total_patients"] == len(all_pts) + 1)
+
+    # ── TEST 3: Create a scheduled appointment for today -> Today's appts & trend increase ──
+    print("\nDASH TEST 3: Create scheduled appointment for today -> Count & Trend increase:")
+    today_iso = date.today().isoformat()
+    today_appts_before = dash_stats2["today_appointments"]
+    today_trend_entry = next((item for item in dash_stats2["appointment_trend"] if item["date"] == today_iso), None)
+    check("Today's date exists in weekly appointment trend", today_trend_entry is not None)
+    sched_trend_before = today_trend_entry["scheduled"] if today_trend_entry else 0
+    comp_trend_before = today_trend_entry["completed"] if today_trend_entry else 0
+
+    dash_appt = post("/api/appointments/", {
+        "patient_id": p1_id,
+        "appointment_date": today_iso,
+        "appointment_time": "16:30",
+        "reason": "Dynamic Dashboard Analytics Test",
+        "status": "Scheduled",
+        "severity": "URGENT"
+    })
+    dash_cleanup_appts.append(dash_appt["id"])
+
+    dash_stats3 = get("/api/dashboard/stats")
+    check("Today's Appointments count incremented by 1",
+          dash_stats3["today_appointments"] == today_appts_before + 1)
+    check("Scheduled Today count incremented by 1",
+          dash_stats3["scheduled_today"] == dash_stats2["scheduled_today"] + 1)
+
+    today_trend_entry3 = next((item for item in dash_stats3["appointment_trend"] if item["date"] == today_iso), None)
+    check("Weekly trend today scheduled count incremented by 1",
+          today_trend_entry3 is not None and today_trend_entry3["scheduled"] == sched_trend_before + 1)
+
+    # ── TEST 4: Change appointment Scheduled -> Completed -> Completed increases, Scheduled decreases ──
+    print("\nDASH TEST 4: Appointment Scheduled -> Completed reflects in stats and graph:")
+    patch(f"/api/appointments/{dash_appt['id']}/status", {"status": "Completed"})
+    dash_stats4 = get("/api/dashboard/stats")
+    check("Completed Today count incremented by 1",
+          dash_stats4["completed_today"] == dash_stats2["completed_today"] + 1)
+    check("Scheduled Today count reverted by 1",
+          dash_stats4["scheduled_today"] == dash_stats2["scheduled_today"])
+
+    today_trend_entry4 = next((item for item in dash_stats4["appointment_trend"] if item["date"] == today_iso), None)
+    check("Weekly trend today completed count incremented by 1",
+          today_trend_entry4 is not None and today_trend_entry4["completed"] == comp_trend_before + 1)
+    check("Weekly trend today scheduled count decreased back",
+          today_trend_entry4 is not None and today_trend_entry4["scheduled"] == sched_trend_before)
+
+    # ── TEST 5: Cancel an appointment -> Excluded from active consultations, no double counting ──
+    print("\nDASH TEST 5: Cancel appointment -> Excluded from active consultations without double counting:")
+    patch(f"/api/appointments/{dash_appt['id']}/status", {"status": "Cancelled"})
+    dash_stats5 = get("/api/dashboard/stats")
+    check("Today's active consultations decreased back to baseline after cancellation",
+          dash_stats5["today_appointments"] == today_appts_before)
+    check("Cancelled Today count incremented by 1",
+          dash_stats5["cancelled_today"] == dash_stats2["cancelled_today"] + 1)
+
+    today_trend_entry5 = next((item for item in dash_stats5["appointment_trend"] if item["date"] == today_iso), None)
+    check("Weekly trend scheduled count does not count Cancelled",
+          today_trend_entry5 is not None and today_trend_entry5["scheduled"] == sched_trend_before)
+    check("Weekly trend completed count does not count Cancelled",
+          today_trend_entry5 is not None and today_trend_entry5["completed"] == comp_trend_before)
+
+    # ── TEST 6: Create pending emergency request -> Pending Emergencies increases ──
+    print("\nDASH TEST 6: Create pending emergency -> Pending Emergencies increases:")
+    pending_amb_before = dash_stats5["pending_ambulances"]
+    new_amb = post("/api/ambulance/", {
+        "patient_name": "Emergency Test Patient",
+        "phone": "9876543219",
+        "location": "Aundh",
+        "destination": "Apex Hospital",
+        "priority": "HIGH",
+        "status": "PENDING"
+    })
+    dash_cleanup_amb.append(new_amb["id"])
+    dash_stats6 = get("/api/dashboard/stats")
+    check("Pending Emergencies incremented by 1",
+          dash_stats6["pending_ambulances"] == pending_amb_before + 1)
+    check("Structured emergencies.pending incremented by 1",
+          dash_stats6["emergencies"]["pending"] == pending_amb_before + 1)
+
+    # ── TEST 7: Change emergency: Pending -> Assigned -> Pending Emergencies decreases ──
+    print("\nDASH TEST 7: Emergency Pending -> Assigned -> Pending Emergencies decreases:")
+    patch(f"/api/ambulance/{new_amb['id']}/status", {"status": "ASSIGNED"})
+    dash_stats7 = get("/api/dashboard/stats")
+    check("Pending Emergencies decreased back to baseline after assignment",
+          dash_stats7["pending_ambulances"] == pending_amb_before)
+
+    # ── TEST 8: Change doctor status -> Available Doctors count updates dynamically ──
+    print("\nDASH TEST 8: Doctor status toggle reflects in Available Doctors count:")
+    avail_docs_before = dash_stats7["available_doctors"]
+    doc_to_toggle = doctors[0]["id"]
+    patch(f"/api/doctors/{doc_to_toggle}", {"status": "Unavailable"})
+    dash_stats8a = get("/api/dashboard/stats")
+    check("Available Doctors decreased by 1 when doctor is marked Unavailable",
+          dash_stats8a["available_doctors"] == avail_docs_before - 1)
+
+    patch(f"/api/doctors/{doc_to_toggle}", {"status": "Available"})
+    dash_stats8b = get("/api/dashboard/stats")
+    check("Available Doctors restored when doctor is marked Available again",
+          dash_stats8b["available_doctors"] == avail_docs_before)
+
+    # ── TEST 9: Empty data handling in weekly trend -> 7 days rendered with 0s without crashing ──
+    print("\nDASH TEST 9: Weekly trend data structure integrity & zero-baseline stability:")
+    trend = dash_stats8b.get("appointment_trend", [])
+    check("Weekly trend contains exactly 7 days (Monday through Sunday)", len(trend) == 7)
+    expected_days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    actual_days = [item["day"] for item in trend]
+    check("Days correctly ordered Mon -> Sun", actual_days == expected_days)
+    all_numeric = all(isinstance(item["scheduled"], int) and item["scheduled"] >= 0 and
+                      isinstance(item["completed"], int) and item["completed"] >= 0 for item in trend)
+    check("All scheduled and completed values are non-negative integers (no NaN or null)", all_numeric)
+
+    # ── TEST 10: API failure handling / non-existent resource returns 404 cleanly ──
+    print("\nDASH TEST 10: Error handling verification:")
+    error_handled = False
+    try:
+        get("/api/dashboard/nonexistent_stats")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            error_handled = True
+    check("Invalid dashboard route returns HTTP 404 cleanly without server crash", error_handled)
+
+finally:
+    # Cleanup dashboard test records
+    print("\nCleaning up dashboard test records...")
+    for pid in dash_cleanup_patients:
+        try:
+            delete(f"/api/patients/{pid}")
+        except Exception:
+            pass
+    for aid in dash_cleanup_amb:
+        try:
+            delete(f"/api/ambulance/{aid}")
+        except Exception:
+            pass
+    for apid in dash_cleanup_appts:
+        try:
+            patch(f"/api/appointments/{apid}/status", {"status": "Cancelled"})
+        except Exception:
+            pass
+    print("Dashboard cleanup completed.")
+
 print(f"\n=== Test Results: {passed} passed, {failed} failed ===\n")
 sys.exit(0 if failed == 0 else 1)
+
 

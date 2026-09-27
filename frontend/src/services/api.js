@@ -8,7 +8,8 @@ const api = axios.create({
 })
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
-export const getDashboard = () => api.get('/api/dashboard/')
+export const getDashboard      = () => api.get('/api/dashboard/')
+export const getDashboardStats = () => api.get('/api/dashboard/stats')
 
 // ─── Patients ────────────────────────────────────────────────────────────────
 export const getPatients    = (search = '') => api.get(`/api/patients/${search ? `?search=${encodeURIComponent(search)}` : ''}`)

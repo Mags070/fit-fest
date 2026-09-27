@@ -71,11 +71,35 @@ When booking an appointment, staff can choose either manual selection or **[ Aut
 
 ---
 
+## Dynamic Dashboard Statistics & Appointment Analytics
+
+### 1. 100% Database-Driven Summary KPIs
+The dashboard calculates statistics dynamically from live database entities:
+- **Registered Patients:** Total registered patient count in the database (`SELECT COUNT(*) FROM patients`).
+- **Available Doctors:** Doctors with status `Available` out of total active roster (`SELECT COUNT(*) FROM doctors WHERE status = 'Available'`).
+- **Today's Appointments:** Active consultations scheduled for today (`appointment_date = :today AND status != 'Cancelled'`).
+- **Pending Emergencies:** Urgent ambulance dispatch requests awaiting triage (`SELECT COUNT(*) FROM ambulance_requests WHERE status = 'PENDING'`).
+
+### 2. Live Weekly Appointment Trend Analytics
+Replaces demo placeholder charts with an active 7-day Monday through Sunday series:
+- Aggregates appointments for the current week into **Scheduled** vs **Completed** lines.
+- Cancelled appointments are filtered out from scheduled and completed visit counts.
+- Initialized with zero defaults across all 7 days to prevent chart crashing or NaN errors.
+- Visual curves adapt dynamically to real appointment additions, status transitions, and cancellations.
+
+### 3. UI Resilience & Controls
+- **Loading State:** Metric cards show `"Loading…"` during fetch.
+- **Manual Refresh:** Header `[Refresh]` button allows clinic staff to re-fetch live statistics on demand.
+- **Error Handling:** Graceful error banner `"Unable to load dashboard statistics."` with a `[Try Again]` button if the backend is unreachable.
+
+---
+
 ## API Endpoints
 
 | Method | URL                                       | Description                               |
 | ------ | ----------------------------------------- | ----------------------------------------- |
-| GET    | `/api/dashboard/`                         | Aggregate statistics (incl. doctors)      |
+| GET    | `/api/dashboard/`                         | Aggregate statistics (incl. structured metrics) |
+| GET    | `/api/dashboard/stats`                    | Alias for live stats & `appointment_trend`|
 | GET    | `/api/doctors/`                           | List all doctors                          |
 | POST   | `/api/doctors/`                           | Register a new doctor                     |
 | GET    | `/api/doctors/available?date=...&time=...`| Categorized available & unavailable list  |
@@ -96,10 +120,11 @@ When booking an appointment, staff can choose either manual selection or **[ Aut
 
 ---
 
-## Automated Tests (Availability & Auto-Assignment Suites)
+## Automated Tests (Availability, Auto-Assignment & Dashboard Suites)
 
 ```powershell
 & "C:\Users\Pranav\AppData\Local\Programs\Python\Python312\python.exe" tests/test_api.py
 ```
-*(38/38 assertions passing — covering all 18 test scenarios: doctor availability conditions, categorized refusal reasons, conflict checks, edge cases 1-9, plus Automatic Doctor Assignment scenarios 1-9 including workload balancing, tie-breakers, race condition prevention, and explicit confirmation)*
+*(63/63 assertions passing — covering all 28 test scenarios: doctor availability conditions 1-9, automatic doctor assignment 1-9 including workload balancing, tie-breakers, and explicit confirmation, plus dynamic dashboard statistics & appointment analytics tests 1-10)*
+
 

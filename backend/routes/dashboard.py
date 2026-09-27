@@ -27,8 +27,10 @@ def get_dashboard(db: Session = Depends(get_db)):
     available_doctors = db.query(Doctor).filter(Doctor.status == "Available").count()
 
     # ── Appointments ──────────────────────────────────────────────────────────
+    # Exclude Cancelled appointments from today's active/completed consultations
     today_appointments = db.query(Appointment).filter(
-        Appointment.appointment_date == today).count()
+        Appointment.appointment_date == today,
+        Appointment.status != "Cancelled").count()
     scheduled_today = db.query(Appointment).filter(
         Appointment.appointment_date == today,
         Appointment.status == "Scheduled").count()
@@ -42,6 +44,44 @@ def get_dashboard(db: Session = Depends(get_db)):
         Appointment.appointment_date > today,
         Appointment.status == "Scheduled").count()
     total_appointments = db.query(Appointment).count()
+
+    # ── Scheduled vs Completed Weekly Trend (Monday to Sunday) ───────────────
+    today_obj = date.today()
+    monday_obj = today_obj - timedelta(days=today_obj.weekday())
+    sunday_obj = monday_obj + timedelta(days=6)
+
+    week_start_str = monday_obj.isoformat()
+    week_end_str = sunday_obj.isoformat()
+
+    week_appts = db.query(Appointment).filter(
+        Appointment.appointment_date >= week_start_str,
+        Appointment.appointment_date <= week_end_str,
+        Appointment.status.in_(["Scheduled", "Completed"])
+    ).all()
+
+    counts = {}
+    for a in week_appts:
+        d_key = a.appointment_date
+        if d_key not in counts:
+            counts[d_key] = {"Scheduled": 0, "Completed": 0}
+        if a.status in counts[d_key]:
+            counts[d_key][a.status] += 1
+
+    DAY_NAMES_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    DAY_NAMES_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    appointment_trend = []
+    for i in range(7):
+        day_date = monday_obj + timedelta(days=i)
+        day_date_str = day_date.isoformat()
+        day_counts = counts.get(day_date_str, {"Scheduled": 0, "Completed": 0})
+        appointment_trend.append({
+            "date": day_date_str,
+            "day": DAY_NAMES_SHORT[i],
+            "day_full": DAY_NAMES_FULL[i],
+            "scheduled": day_counts["Scheduled"],
+            "completed": day_counts["Completed"]
+        })
 
     # ── Follow-ups ────────────────────────────────────────────────────────────
     followups_due_today = db.query(Appointment).filter(
@@ -86,6 +126,27 @@ def get_dashboard(db: Session = Depends(get_db)):
         "cancelled_today":     cancelled_today,
         "upcoming_appointments": upcoming_appointments,
         "total_appointments":  total_appointments,
+        # Appointment Trend
+        "appointment_trend":   appointment_trend,
+        # Structured Objects
+        "today": {
+            "appointments": today_appointments,
+            "scheduled": scheduled_today,
+            "completed": completed_today,
+            "cancelled": cancelled_today,
+        },
+        "patients": {
+            "registered": total_patients,
+        },
+        "doctors": {
+            "available": available_doctors,
+            "total": total_doctors,
+        },
+        "emergencies": {
+            "pending": pending_ambulances,
+            "assigned": assigned_ambulances,
+            "total": total_ambulances,
+        },
         # Follow-ups
         "followups_due_today": followups_due_today,
         "followups_this_week": followups_this_week,
@@ -104,3 +165,10 @@ def get_dashboard(db: Session = Depends(get_db)):
         "emergency_hospitals": emergency_hospitals,
         "date": today,
     }
+
+
+@router.get("/stats")
+def get_dashboard_stats(db: Session = Depends(get_db)):
+    """Convenience alias for dashboard stats."""
+    return get_dashboard(db)
+
