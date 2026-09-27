@@ -2,12 +2,13 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Calendar, AlertTriangle,
-  Droplets, Activity, Bell, Building2
+  Droplets, Activity, Bell, Building2, UserCheck
 } from 'lucide-react'
 
 const navItems = [
   { to: '/',            icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/patients',    icon: Users,           label: 'Patients' },
+  { to: '/doctors',     icon: UserCheck,       label: 'Doctors' },
   { to: '/appointments',icon: Calendar,        label: 'Appointments' },
   { to: '/reminders',   icon: Bell,            label: 'Reminders' },
   { to: '/emergency',   icon: AlertTriangle,   label: 'Emergency', section: 'Emergency' },
@@ -47,7 +48,7 @@ export default function Navbar() {
       </nav>
 
       <div style={{ padding: '16px', borderTop: '1px solid #374151', fontSize: '11px', color: '#6b7280' }}>
-        MVP v2.0 · {new Date().toLocaleDateString()}
+        MVP v2.1 · {new Date().toLocaleDateString()}
       </div>
     </aside>
   )

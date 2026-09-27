@@ -9,6 +9,7 @@ class Appointment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     appointment_date = Column(String, nullable=False)   # YYYY-MM-DD
     appointment_time = Column(String, nullable=False)   # HH:MM
     reason = Column(String, nullable=False)
@@ -20,3 +21,4 @@ class Appointment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     patient = relationship("Patient", backref="appointments")
+    doctor = relationship("Doctor", backref="appointments")

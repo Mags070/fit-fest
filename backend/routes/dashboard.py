@@ -8,6 +8,7 @@ from models.ambulance import AmbulanceRequest
 from models.ambulance_unit import AmbulanceUnit
 from models.blood import BloodRecord
 from models.hospital import Hospital
+from models.doctor import Doctor
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -20,6 +21,10 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     # ── Patients ──────────────────────────────────────────────────────────────
     total_patients = db.query(Patient).count()
+
+    # ── Doctors ───────────────────────────────────────────────────────────────
+    total_doctors = db.query(Doctor).count()
+    available_doctors = db.query(Doctor).filter(Doctor.status == "Available").count()
 
     # ── Appointments ──────────────────────────────────────────────────────────
     today_appointments = db.query(Appointment).filter(
@@ -71,6 +76,9 @@ def get_dashboard(db: Session = Depends(get_db)):
     return {
         # Patients
         "total_patients": total_patients,
+        # Doctors
+        "total_doctors": total_doctors,
+        "available_doctors": available_doctors,
         # Appointments
         "today_appointments":  today_appointments,
         "scheduled_today":     scheduled_today,

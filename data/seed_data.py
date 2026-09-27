@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from database import SessionLocal, engine, Base
 from models.patient import Patient
+from models.doctor import Doctor
 from models.appointment import Appointment
 from models.ambulance import AmbulanceRequest
 from models.ambulance_unit import AmbulanceUnit
@@ -26,6 +27,7 @@ db.query(AmbulanceRequest).delete()
 db.query(AmbulanceUnit).delete()
 db.query(BloodRecord).delete()
 db.query(Hospital).delete()
+db.query(Doctor).delete()
 db.query(Patient).delete()
 db.commit()
 
@@ -51,6 +53,25 @@ for obj in patient_objs:
     db.refresh(obj)
 print(f"[OK] Inserted {len(patient_objs)} patients")
 
+# ─── Doctors ─────────────────────────────────────────────────────────────────
+doctors_data = [
+    {"name": "Dr. Priya Sharma",    "specialization": "General Physician", "phone": "9812345678", "available_days": "Mon-Fri", "start_time": "10:00", "end_time": "14:00", "status": "Available"},
+    {"name": "Dr. Amit Patil",      "specialization": "Pediatrician",      "phone": "9823456780", "available_days": "Mon-Sat", "start_time": "09:00", "end_time": "13:00", "status": "Available"},
+    {"name": "Dr. Neha Kulkarni",   "specialization": "General Physician", "phone": "9834567891", "available_days": "Mon-Fri", "start_time": "14:00", "end_time": "18:00", "status": "Available"},
+    {"name": "Dr. Rajesh Deshmukh", "specialization": "Orthopedic",        "phone": "9845678902", "available_days": "Mon-Sat", "start_time": "11:00", "end_time": "15:00", "status": "Available"},
+    {"name": "Dr. Ananya Sen",      "specialization": "Cardiologist",      "phone": "9856789013", "available_days": "Mon-Fri", "start_time": "10:00", "end_time": "14:00", "status": "Available"},
+]
+
+doctor_objs = []
+for d in doctors_data:
+    obj = Doctor(**d)
+    db.add(obj)
+    doctor_objs.append(obj)
+db.commit()
+for obj in doctor_objs:
+    db.refresh(obj)
+print(f"[OK] Inserted {len(doctor_objs)} doctors")
+
 # ─── Appointments ─────────────────────────────────────────────────────────────
 today     = date.today().isoformat()
 tomorrow  = (date.today() + timedelta(days=1)).isoformat()
@@ -59,35 +80,35 @@ in5days   = (date.today() + timedelta(days=5)).isoformat()
 yesterday = (date.today() - timedelta(days=1)).isoformat()
 
 appointments_data = [
-    {"patient_id": patient_objs[0].id, "appointment_date": today,     "appointment_time": "09:00",
+    {"patient_id": patient_objs[0].id, "doctor_id": doctor_objs[0].id, "appointment_date": today,     "appointment_time": "10:00",
      "reason": "General Consultation",  "status": "Scheduled", "severity": "ROUTINE",
      "follow_up_date": in3days, "follow_up_notes": "Review blood reports"},
 
-    {"patient_id": patient_objs[1].id, "appointment_date": today,     "appointment_time": "10:30",
+    {"patient_id": patient_objs[1].id, "doctor_id": doctor_objs[1].id, "appointment_date": today,     "appointment_time": "10:30",
      "reason": "High Fever & Chills",   "status": "Completed", "severity": "URGENT",
      "follow_up_date": None, "follow_up_notes": None},
 
-    {"patient_id": patient_objs[2].id, "appointment_date": today,     "appointment_time": "11:00",
+    {"patient_id": patient_objs[2].id, "doctor_id": doctor_objs[4].id, "appointment_date": today,     "appointment_time": "11:00",
      "reason": "Severe Chest Pain",     "status": "Scheduled", "severity": "CRITICAL",
      "follow_up_date": in5days, "follow_up_notes": "Discuss lab results"},
 
-    {"patient_id": patient_objs[3].id, "appointment_date": today,     "appointment_time": "12:30",
+    {"patient_id": patient_objs[3].id, "doctor_id": doctor_objs[0].id, "appointment_date": today,     "appointment_time": "12:30",
      "reason": "Administrative Query",  "status": "Cancelled", "severity": "ROUTINE",
      "follow_up_date": None, "follow_up_notes": None},
 
-    {"patient_id": patient_objs[4].id, "appointment_date": today,     "appointment_time": "14:00",
+    {"patient_id": patient_objs[4].id, "doctor_id": doctor_objs[3].id, "appointment_date": today,     "appointment_time": "14:00",
      "reason": "Routine Check-up",      "status": "Scheduled", "severity": "ROUTINE",
      "follow_up_date": None, "follow_up_notes": None},
 
-    {"patient_id": patient_objs[5].id, "appointment_date": tomorrow,  "appointment_time": "09:30",
+    {"patient_id": patient_objs[5].id, "doctor_id": doctor_objs[1].id, "appointment_date": tomorrow,  "appointment_time": "09:30",
      "reason": "Prescription Renewal",  "status": "Scheduled", "severity": "ROUTINE",
      "follow_up_date": None, "follow_up_notes": None},
 
-    {"patient_id": patient_objs[6].id, "appointment_date": tomorrow,  "appointment_time": "11:00",
+    {"patient_id": patient_objs[6].id, "doctor_id": doctor_objs[4].id, "appointment_date": tomorrow,  "appointment_time": "11:00",
      "reason": "Acute Hypertension",    "status": "Scheduled", "severity": "URGENT",
      "follow_up_date": in3days, "follow_up_notes": "Check BP"},
 
-    {"patient_id": patient_objs[0].id, "appointment_date": yesterday, "appointment_time": "10:00",
+    {"patient_id": patient_objs[0].id, "doctor_id": doctor_objs[0].id, "appointment_date": yesterday, "appointment_time": "10:00",
      "reason": "Initial Registration",  "status": "Completed", "severity": "ROUTINE",
      "follow_up_date": None, "follow_up_notes": None},
 ]

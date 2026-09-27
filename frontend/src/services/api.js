@@ -17,6 +17,15 @@ export const createPatient  = (data) => api.post('/api/patients/', data)
 export const updatePatient  = (id, data) => api.patch(`/api/patients/${id}`, data)
 export const deletePatient  = (id) => api.delete(`/api/patients/${id}`)
 
+// ─── Doctors ─────────────────────────────────────────────────────────────────
+export const getDoctors          = (params = {}) => api.get('/api/doctors/', { params })
+export const getDoctor           = (id) => api.get(`/api/doctors/${id}`)
+export const createDoctor        = (data) => api.post('/api/doctors/', data)
+export const updateDoctor        = (id, data) => api.patch(`/api/doctors/${id}`, data)
+export const deleteDoctor        = (id) => api.delete(`/api/doctors/${id}`)
+export const getAvailableDoctors = (date, time) => api.get('/api/doctors/available', { params: { date, time } })
+export const getDoctorSchedule   = (id, date) => api.get(`/api/doctors/${id}/schedule`, { params: { date } })
+
 // ─── Appointments ─────────────────────────────────────────────────────────────
 export const getAppointments    = (params = {}) => api.get('/api/appointments/', { params })
 export const getAppointment     = (id) => api.get(`/api/appointments/${id}`)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Calendar, Ambulance, Droplets, CheckCircle, Clock, ArrowRight, Bell, Building2, Truck } from 'lucide-react'
+import { Users, Calendar, Ambulance, Droplets, CheckCircle, Clock, ArrowRight, Bell, Building2, Truck, UserCheck } from 'lucide-react'
 import { getDashboard, getAppointments, getAmbulance } from '../services/api'
 import StatCard from '../components/StatCard'
 import { Badge } from '../components/Badge'
@@ -41,18 +41,18 @@ export default function Dashboard() {
 
       {/* Stat cards grid */}
       <div className="stat-grid">
-        <StatCard icon={<Users size={22} />}    value={stats?.total_patients}     label="Registered Patients"    color="blue"  />
-        <StatCard icon={<Calendar size={22} />} value={stats?.today_appointments}  label="Today's Appointments"   color="green" />
-        <StatCard icon={<Bell size={22} />}     value={stats?.followups_due_today}label="Follow-ups Due Today"  color="amber" />
-        <StatCard icon={<Ambulance size={22} />}value={stats?.pending_ambulances}  label="Pending Emergencies"    color="red"   />
+        <StatCard icon={<Users size={22} />}     value={stats?.total_patients}     label="Registered Patients"    color="blue"  />
+        <StatCard icon={<UserCheck size={22} />} value={`${stats?.available_doctors || 0}/${stats?.total_doctors || 0}`} label="Available Doctors" color="green" />
+        <StatCard icon={<Calendar size={22} />}  value={stats?.today_appointments}  label="Today's Appointments"   color="blue" />
+        <StatCard icon={<Ambulance size={22} />} value={stats?.pending_ambulances}  label="Pending Emergencies"    color="red"   />
       </div>
 
       {/* Second row stats */}
       <div className="stat-grid">
+        <StatCard icon={<Bell size={22} />}     value={stats?.followups_due_today}label="Follow-ups Due Today"  color="amber" />
         <StatCard icon={<Truck size={22} />}    value={`${stats?.available_units || 0}/${stats?.total_units || 0}`} label="Ambulance Fleet Free" color="green" />
         <StatCard icon={<Droplets size={22} />} value={stats?.available_blood}     label="Available Blood Records"color="amber" />
         <StatCard icon={<Building2 size={22} />}value={stats?.total_hospitals}     label="Nearby Facilities"      color="blue"  />
-        <StatCard icon={<Calendar size={22} />} value={stats?.upcoming_appointments}label="Upcoming Scheduled"    color="green" />
       </div>
 
       {/* Two column layout */}
@@ -78,6 +78,7 @@ export default function Dashboard() {
                   <tr>
                     <th>Patient</th>
                     <th>Time</th>
+                    <th>Doctor</th>
                     <th>Severity</th>
                     <th>Status</th>
                   </tr>
@@ -87,6 +88,13 @@ export default function Dashboard() {
                     <tr key={a.id}>
                       <td className="text-bold">{a.patient_name}</td>
                       <td>{a.appointment_time}</td>
+                      <td>
+                        {a.doctor_name ? (
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{a.doctor_name}</div>
+                        ) : (
+                          <span className="text-muted" style={{ fontSize: 12 }}>Unassigned</span>
+                        )}
+                      </td>
                       <td><Badge status={a.severity || 'ROUTINE'} /></td>
                       <td><Badge status={a.status} /></td>
                     </tr>
@@ -140,12 +148,13 @@ export default function Dashboard() {
         </div>
         <div className="card-body">
           <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+            <SummaryItem color="#16a34a" label="Available Doctors" value={stats?.available_doctors} />
+            <SummaryItem color="#2563eb" label="Total Doctors" value={stats?.total_doctors} />
             <SummaryItem color="#16a34a" label="Completed Today" value={stats?.completed_today} />
             <SummaryItem color="#2563eb" label="Scheduled Today" value={stats?.scheduled_today} />
             <SummaryItem color="#dc2626" label="Cancelled Today" value={stats?.cancelled_today} />
             <SummaryItem color="#d97706" label="Total Ambulances" value={stats?.total_ambulances} />
             <SummaryItem color="#7c3aed" label="Blood Bank Records" value={stats?.blood_records} />
-            <SummaryItem color="#0284c7" label="Emergency Facilities" value={stats?.emergency_hospitals} />
           </div>
         </div>
       </div>

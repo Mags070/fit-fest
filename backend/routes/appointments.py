@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date
+from datetime import datetime, date
 from database import get_db
 from models.appointment import Appointment
 from models.patient import Patient
+from models.doctor import Doctor
 from schemas.appointment import (
     AppointmentCreate, AppointmentStatusUpdate,
     AppointmentFollowUpUpdate, AppointmentResponse
 )
+from routes.doctors import is_doctor_working_on_date
 
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
 
@@ -17,6 +19,7 @@ def enrich_appointment(appt: Appointment) -> dict:
     return {
         "id": appt.id,
         "patient_id": appt.patient_id,
+        "doctor_id": appt.doctor_id,
         "appointment_date": appt.appointment_date,
         "appointment_time": appt.appointment_time,
         "reason": appt.reason,
@@ -28,6 +31,8 @@ def enrich_appointment(appt: Appointment) -> dict:
         "patient_name":       appt.patient.name       if appt.patient else None,
         "patient_phone":      appt.patient.phone      if appt.patient else None,
         "patient_blood_group":appt.patient.blood_group if appt.patient else None,
+        "doctor_name":        appt.doctor.name        if appt.doctor else None,
+        "doctor_specialization": appt.doctor.specialization if appt.doctor else None,
     }
 
 
@@ -36,6 +41,50 @@ def create_appointment(appt: AppointmentCreate, db: Session = Depends(get_db)):
     patient = db.query(Patient).filter(Patient.id == appt.patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+
+    # If doctor_id is provided, validate availability thoroughly
+    if appt.doctor_id is not None:
+        doctor = db.query(Doctor).filter(Doctor.id == appt.doctor_id).first()
+        if not doctor:
+            raise HTTPException(status_code=404, detail="Selected doctor not found")
+
+        if doctor.status != "Available":
+            raise HTTPException(status_code=400, detail=f"{doctor.name} is currently marked Unavailable.")
+
+        try:
+            target_date = datetime.strptime(appt.appointment_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Expected YYYY-MM-DD.")
+
+        # Check working days
+        if not is_doctor_working_on_date(doctor.available_days, target_date):
+            day_name = target_date.strftime("%A")
+            raise HTTPException(
+                status_code=400,
+                detail=f"{doctor.name} does not work on {day_name}s ({doctor.available_days})."
+            )
+
+        # Check working hours
+        if not (doctor.start_time <= appt.appointment_time < doctor.end_time):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Appointment time {appt.appointment_time} is outside {doctor.name}'s working hours ({doctor.start_time} - {doctor.end_time})."
+            )
+
+        # Check conflicting active appointment
+        conflict = db.query(Appointment).filter(
+            Appointment.doctor_id == doctor.id,
+            Appointment.appointment_date == appt.appointment_date,
+            Appointment.appointment_time == appt.appointment_time,
+            Appointment.status != "Cancelled"
+        ).first()
+
+        if conflict:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{doctor.name} already has an active appointment at {appt.appointment_time} on {appt.appointment_date}."
+            )
+
     db_appt = Appointment(**appt.model_dump())
     db.add(db_appt)
     db.commit()
@@ -50,6 +99,7 @@ def list_appointments(
     status: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
     patient_id: Optional[int] = Query(None),
+    doctor_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
     query = db.query(Appointment)
@@ -61,6 +111,8 @@ def list_appointments(
         query = query.filter(Appointment.severity == severity)
     if patient_id:
         query = query.filter(Appointment.patient_id == patient_id)
+    if doctor_id:
+        query = query.filter(Appointment.doctor_id == doctor_id)
     appts = query.order_by(Appointment.appointment_date, Appointment.appointment_time).all()
     return [enrich_appointment(a) for a in appts]
 
