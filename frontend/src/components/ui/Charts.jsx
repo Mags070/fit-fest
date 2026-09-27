@@ -159,8 +159,8 @@ export function AcuityDonutChart({
   const urgentPct = Math.round((urgent / total) * 100)
   const criticalPct = Math.max(0, 100 - routinePct - urgentPct)
 
-  const size = 160
-  const strokeWidth = 20
+  const size = 130
+  const strokeWidth = 16
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
 
@@ -239,18 +239,15 @@ export function AcuityDonutChart({
 
         <div className="donut-legend">
           <div className="donut-legend-row">
-            <span className="legend-chip green" />
-            <span className="donut-legend-name">Routine</span>
+            <span className="legend-item"><span className="legend-chip green" /> Routine</span>
             <span className="donut-legend-val">{routine} ({routinePct}%)</span>
           </div>
           <div className="donut-legend-row">
-            <span className="legend-chip amber" />
-            <span className="donut-legend-name">Urgent</span>
+            <span className="legend-item"><span className="legend-chip amber" /> Urgent</span>
             <span className="donut-legend-val">{urgent} ({urgentPct}%)</span>
           </div>
           <div className="donut-legend-row">
-            <span className="legend-chip red" />
-            <span className="donut-legend-name">Critical</span>
+            <span className="legend-item"><span className="legend-chip red" /> Critical</span>
             <span className="donut-legend-val">{critical} ({criticalPct}%)</span>
           </div>
         </div>
@@ -279,8 +276,8 @@ export function DoctorWorkloadChart({ doctors = [] }) {
           </div>
         ) : (
           displayDocs.map((doc, idx) => {
-            const count = doc.appointment_count || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
-            const maxVal = 8
+            const count = doc.appointment_count ?? (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+            const maxVal = Math.max(...displayDocs.map(d => d.appointment_count || 0), 10)
             const pct = Math.min(100, Math.round((count / maxVal) * 100))
 
             return (

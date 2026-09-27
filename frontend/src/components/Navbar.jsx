@@ -36,7 +36,7 @@ export default function Navbar() {
             to={to}
             end={to === '/'}
             className={({ isActive }) => `slim-nav-item ${isActive ? 'active' : ''}`}
-            title={label}
+            aria-label={label}
           >
             <span className="slim-active-bar" />
             <div className="slim-icon-box">
@@ -52,13 +52,13 @@ export default function Navbar() {
         <button
           type="button"
           className="slim-nav-item logout-btn"
-          title="Clinical Session Active"
+          aria-label="Clinical Session Active"
           onClick={() => {}}
         >
           <div className="slim-icon-box">
             <LogOut size={18} />
           </div>
-          <span className="slim-tooltip">Staff Session</span>
+          <span className="slim-tooltip">Session Active</span>
         </button>
       </div>
     </aside>
