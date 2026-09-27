@@ -10,7 +10,7 @@ from schemas.appointment import (
     AppointmentCreate, AppointmentStatusUpdate,
     AppointmentFollowUpUpdate, AppointmentResponse
 )
-from routes.doctors import is_doctor_working_on_date
+from routes.doctors import is_doctor_working_on_date, check_doctor_availability
 
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
 
@@ -48,41 +48,16 @@ def create_appointment(appt: AppointmentCreate, db: Session = Depends(get_db)):
         if not doctor:
             raise HTTPException(status_code=404, detail="Selected doctor not found")
 
-        if doctor.status != "Available":
-            raise HTTPException(status_code=400, detail=f"{doctor.name} is currently marked Unavailable.")
-
         try:
             target_date = datetime.strptime(appt.appointment_date, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Expected YYYY-MM-DD.")
 
-        # Check working days
-        if not is_doctor_working_on_date(doctor.available_days, target_date):
-            day_name = target_date.strftime("%A")
+        is_avail, reason = check_doctor_availability(doctor, target_date, appt.appointment_time, db)
+        if not is_avail:
             raise HTTPException(
                 status_code=400,
-                detail=f"{doctor.name} does not work on {day_name}s ({doctor.available_days})."
-            )
-
-        # Check working hours
-        if not (doctor.start_time <= appt.appointment_time < doctor.end_time):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Appointment time {appt.appointment_time} is outside {doctor.name}'s working hours ({doctor.start_time} - {doctor.end_time})."
-            )
-
-        # Check conflicting active appointment
-        conflict = db.query(Appointment).filter(
-            Appointment.doctor_id == doctor.id,
-            Appointment.appointment_date == appt.appointment_date,
-            Appointment.appointment_time == appt.appointment_time,
-            Appointment.status != "Cancelled"
-        ).first()
-
-        if conflict:
-            raise HTTPException(
-                status_code=400,
-                detail=f"{doctor.name} already has an active appointment at {appt.appointment_time} on {appt.appointment_date}."
+                detail=f"Doctor is no longer available for this time ({reason}). Please select another doctor."
             )
 
     db_appt = Appointment(**appt.model_dump())

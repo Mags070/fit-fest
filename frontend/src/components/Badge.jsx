@@ -1,26 +1,50 @@
-/**
- * Returns a CSS class for a given status or severity value.
- */
+import React from 'react'
+
 export function statusBadge(status) {
-  if (!status) return 'badge'
+  if (!status) return 'ui-badge ui-badge-secondary'
   const map = {
-    scheduled:   'badge badge-scheduled',
-    completed:   'badge badge-completed',
-    cancelled:   'badge badge-cancelled',
-    pending:     'badge badge-pending',
-    assigned:    'badge badge-assigned',
-    high:        'badge badge-high',
-    medium:      'badge badge-medium',
-    low:         'badge badge-low',
-    available:   'badge badge-available',
-    unavailable: 'badge badge-unavailable',
-    routine:     'badge badge-low',
-    urgent:      'badge badge-medium',
-    critical:    'badge badge-high',
+    scheduled:   'ui-badge ui-badge-primary',
+    completed:   'ui-badge ui-badge-success',
+    cancelled:   'ui-badge ui-badge-secondary',
+    pending:     'ui-badge ui-badge-warning',
+    assigned:    'ui-badge ui-badge-primary',
+    high:        'ui-badge ui-badge-destructive',
+    medium:      'ui-badge ui-badge-warning',
+    low:         'ui-badge ui-badge-success',
+    available:   'ui-badge ui-badge-success',
+    unavailable: 'ui-badge ui-badge-destructive',
+    routine:     'ui-badge ui-badge-success',
+    urgent:      'ui-badge ui-badge-warning',
+    critical:    'ui-badge ui-badge-destructive',
   }
-  return map[status.toLowerCase()] || 'badge'
+  return map[status.toLowerCase()] || 'ui-badge ui-badge-secondary'
 }
 
-export function Badge({ status }) {
-  return <span className={statusBadge(status)}>{status}</span>
+export function Badge({
+  children,
+  status,
+  variant,
+  dot = false,
+  className = '',
+  ...props
+}) {
+  const content = children || status
+  let badgeClass = ''
+
+  if (variant) {
+    badgeClass = `ui-badge ui-badge-${variant}`
+  } else if (status) {
+    badgeClass = statusBadge(status)
+  } else {
+    badgeClass = 'ui-badge ui-badge-secondary'
+  }
+
+  return (
+    <span className={`${badgeClass} ${className}`.trim()} {...props}>
+      {dot && <span className="ui-badge-dot" />}
+      {content}
+    </span>
+  )
 }
+
+export default Badge

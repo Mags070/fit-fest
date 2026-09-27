@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -38,16 +38,41 @@ class DoctorResponse(BaseModel):
         from_attributes = True
 
 
-class DoctorAvailableResponse(BaseModel):
+class AvailableDoctorItem(BaseModel):
     id: int
     name: str
     specialization: str
-    phone: str
-    available_days: str
-    start_time: str
-    end_time: str
-    status: str
+    phone: Optional[str] = None
+    available_days: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    working_hours: Optional[str] = None
+    status: Optional[str] = "Available"
     available: bool = True
 
     class Config:
         from_attributes = True
+
+
+class UnavailableDoctorItem(BaseModel):
+    id: int
+    name: str
+    specialization: str
+    phone: Optional[str] = None
+    available_days: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    working_hours: Optional[str] = None
+    status: Optional[str] = None
+    reason: str
+    available: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class DoctorAvailabilityResponse(BaseModel):
+    date: str
+    time: str
+    available_doctors: List[AvailableDoctorItem]
+    unavailable_doctors: List[UnavailableDoctorItem]

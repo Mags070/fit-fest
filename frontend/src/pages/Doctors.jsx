@@ -3,6 +3,8 @@ import { Plus, UserCheck, Calendar, Clock, Phone, Trash2, CheckCircle, Search, F
 import { getDoctors, createDoctor, updateDoctor, deleteDoctor, getDoctorSchedule } from '../services/api'
 import Modal from '../components/Modal'
 import { Badge } from '../components/Badge'
+import PageHeader from '../components/PageHeader'
+import Button from '../components/ui/Button'
 
 const SPECIALIZATIONS = [
   'General Physician', 'Pediatrician', 'Cardiologist', 'Orthopedic',
@@ -121,69 +123,81 @@ export default function Doctors() {
   }
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <h2>🩺 Doctors & Availability</h2>
-          <p>Manage clinic doctors, working hours, and daily schedules</p>
+    <div>
+      <PageHeader
+        title="Doctors & On-Call Directory"
+        description="Manage clinical staff schedules, active on-duty availability, and shift assignments"
+        badge={
+          <span className="std-header-badge">
+            <UserCheck size={13} style={{ color: 'var(--primary)' }} />
+            <span>{doctors.filter(d => d.status === 'Available').length}/{doctors.length} On Duty</span>
+          </span>
+        }
+        action={
+          <Button variant="default" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
+            <Plus size={16} /> Add Doctor
+          </Button>
+        }
+      />
+
+      {alert && (
+        <div className={`alert alert-${alert.type}`} style={{ marginBottom: 16 }}>
+          <CheckCircle size={16} /> {alert.msg}
         </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
-          <Plus size={16} /> Add Doctor
+      )}
+
+      {/* Standard Tab Switch */}
+      <div className="std-tab-group">
+        <button
+          type="button"
+          className={`std-tab-btn ${activeTab === 'directory' ? 'active' : ''}`}
+          onClick={() => setActiveTab('directory')}
+        >
+          <UserCheck size={15} />
+          <span>Doctor Directory ({doctors.length})</span>
+        </button>
+        <button
+          type="button"
+          className={`std-tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
+          onClick={() => setActiveTab('schedule')}
+        >
+          <Calendar size={15} />
+          <span>Doctor Schedule View</span>
         </button>
       </div>
 
-      <div className="page-content">
-        {alert && (
-          <div className={`alert alert-${alert.type}`}>
-            <CheckCircle size={16} /> {alert.msg}
+      {/* Tab 1: Doctor Directory */}
+      {activeTab === 'directory' && (
+        <div>
+          {/* Standard Compact Search & Filter Bar */}
+          <div className="std-filter-bar">
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: 320 }}>
+              <Search size={15} style={{ position: 'absolute', left: 12, color: 'var(--muted-foreground)' }} />
+              <input
+                className="form-control"
+                style={{ paddingLeft: 34, height: 36, fontSize: 13 }}
+                placeholder="Search doctor by name or specialization..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted-foreground)' }}>
+              {filteredDoctors.length} doctors found
+            </span>
           </div>
-        )}
 
-        {/* Tab switch */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-          <button
-            className={`btn ${activeTab === 'directory' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setActiveTab('directory')}
-          >
-            <UserCheck size={16} /> Doctor Directory ({doctors.length})
-          </button>
-          <button
-            className={`btn ${activeTab === 'schedule' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setActiveTab('schedule')}
-          >
-            <Calendar size={16} /> Doctor Schedule View
-          </button>
-        </div>
-
-        {/* Tab 1: Doctor Directory */}
-        {activeTab === 'directory' && (
-          <div>
-            {/* Search */}
-            <div className="card" style={{ marginBottom: 20 }}>
-              <div className="card-body" style={{ paddingTop: 12, paddingBottom: 12 }}>
-                <div className="search-wrap">
-                  <Search size={16} />
-                  <input
-                    className="form-control search-input"
-                    placeholder="Search doctor by name or specialization..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                  />
-                </div>
+          {loading ? (
+            <div className="loader"><div className="spinner" /></div>
+          ) : filteredDoctors.length === 0 ? (
+            <div className="table-card">
+              <div className="empty-state">
+                <UserCheck size={36} />
+                <p>No doctors found.</p>
               </div>
             </div>
-
-            {loading ? (
-              <div className="loader"><div className="spinner" /></div>
-            ) : filteredDoctors.length === 0 ? (
-              <div className="card">
-                <div className="empty-state">
-                  <UserCheck size={40} />
-                  <p>No doctors found.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="table-wrap card">
+          ) : (
+            <div className="table-card">
+              <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
@@ -193,20 +207,17 @@ export default function Doctors() {
                       <th>Working Hours</th>
                       <th>Phone</th>
                       <th>Status</th>
-                      <th>Actions</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredDoctors.map(doc => (
                       <tr key={doc.id}>
                         <td>
-                          <div className="text-bold" style={{ fontSize: 14 }}>{doc.name}</div>
+                          <div className="text-bold" style={{ fontSize: 13.5 }}>{doc.name}</div>
                         </td>
                         <td>
-                          <span style={{
-                            background: '#dbeafe', color: '#1e40af',
-                            padding: '3px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600
-                          }}>
+                          <span className="specialization-pill">
                             {doc.specialization}
                           </span>
                         </td>
@@ -226,8 +237,8 @@ export default function Doctors() {
                         <td>
                           <Badge status={doc.status} />
                         </td>
-                        <td>
-                          <div className="flex" style={{ gap: 6 }}>
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="flex" style={{ justifyContent: 'flex-end', gap: 6 }}>
                             <button
                               className="btn btn-ghost btn-sm"
                               onClick={() => openScheduleForDoctor(doc.id)}
@@ -254,133 +265,123 @@ export default function Doctors() {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Tab 2: Doctor Schedule View */}
-        {activeTab === 'schedule' && (
-          <div>
-            <div className="card" style={{ marginBottom: 20 }}>
-              <div className="card-body" style={{ padding: '14px 20px' }}>
-                <div className="flex" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-                  <div className="form-group" style={{ minWidth: 220 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600 }}>Select Doctor</label>
-                    <select
-                      className="form-control"
-                      value={selectedDoctorId}
-                      onChange={e => setSelectedDoctorId(Number(e.target.value))}
-                    >
-                      {doctors.map(d => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} ({d.specialization}) - {d.status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ minWidth: 180 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600 }}>Schedule Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={scheduleDate}
-                      onChange={e => setScheduleDate(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ alignSelf: 'flex-end' }}>
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => setScheduleDate(new Date().toISOString().split('T')[0])}
-                    >
-                      Today
-                    </button>
-                  </div>
-                </div>
+      {/* Tab 2: Doctor Schedule View */}
+      {activeTab === 'schedule' && (
+        <div>
+          <div className="std-filter-bar">
+            <span className="std-filter-label">
+              <UserCheck size={14} /> Doctor:
+            </span>
+            <select
+              className="form-control"
+              style={{ width: 260, height: 36, fontSize: 13 }}
+              value={selectedDoctorId}
+              onChange={e => setSelectedDoctorId(Number(e.target.value))}
+            >
+              {doctors.map(d => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.specialization}) - {d.status}
+                </option>
+              ))}
+            </select>
+
+            <span className="std-filter-label" style={{ marginLeft: 8 }}>
+              <Calendar size={14} /> Date:
+            </span>
+            <input
+              type="date"
+              className="form-control"
+              style={{ width: 150, height: 36, fontSize: 13 }}
+              value={scheduleDate}
+              onChange={e => setScheduleDate(e.target.value)}
+            />
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setScheduleDate(new Date().toISOString().split('T')[0])}
+            >
+              Today
+            </button>
+          </div>
+
+          {loadingSchedule ? (
+            <div className="loader"><div className="spinner" /></div>
+          ) : !scheduleData ? (
+            <div className="table-card">
+              <div className="empty-state">
+                <Calendar size={36} />
+                <p>Select a doctor and date to view schedule.</p>
               </div>
             </div>
-
-            {loadingSchedule ? (
-              <div className="loader"><div className="spinner" /></div>
-            ) : !scheduleData ? (
-              <div className="card">
-                <div className="empty-state">
-                  <Calendar size={40} />
-                  <p>Select a doctor and date to view schedule.</p>
+          ) : (
+            <div className="table-card">
+              <div className="table-card-header">
+                <div>
+                  <h3 className="table-card-title">{scheduleData.doctor_name} — {scheduleData.specialization}</h3>
+                  <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    Date: <strong>{scheduleData.date}</strong> | Working Day: {scheduleData.works_today ? '✅ On Duty' : '❌ Off Duty'} | Status: <Badge status={scheduleData.doctor_status} />
+                  </p>
                 </div>
               </div>
-            ) : (
-              <div className="card">
-                <div className="card-header">
-                  <div>
-                    <h3>{scheduleData.doctor_name} — {scheduleData.specialization}</h3>
-                    <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-                      Date: <strong>{scheduleData.date}</strong> | Working Day: {scheduleData.works_today ? '✅ On Duty' : '❌ Off Duty'} | Status: <Badge status={scheduleData.doctor_status} />
-                    </p>
-                  </div>
-                </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Time Slot</th>
-                        <th>Status</th>
-                        <th>Assigned Patient</th>
-                        <th>Reason / Notes</th>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time Slot</th>
+                      <th>Status</th>
+                      <th>Assigned Patient</th>
+                      <th>Reason / Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduleData.slots.map(slot => (
+                      <tr key={slot.time} className={slot.available ? 'slot-row-avail' : 'slot-row-busy'}>
+                        <td className="text-bold flex">
+                          <Clock size={14} color="var(--primary)" />
+                          {slot.time}
+                        </td>
+                        <td>
+                          {slot.available ? (
+                            <Badge status="available" dot>
+                              AVAILABLE
+                            </Badge>
+                          ) : slot.status === 'OFF_DUTY' ? (
+                            <Badge status="cancelled">
+                              OFF DUTY
+                            </Badge>
+                          ) : slot.status === 'UNAVAILABLE' ? (
+                            <Badge status="unavailable">
+                              DOCTOR UNAVAILABLE
+                            </Badge>
+                          ) : (
+                            <Badge status={slot.status} />
+                          )}
+                        </td>
+                        <td>
+                          {slot.patient_name ? (
+                            <span className="text-bold">{slot.patient_name}</span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: 13 }}>
+                          {slot.reason || (slot.available ? 'Ready for patient assignment' : '—')}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {scheduleData.slots.map(slot => (
-                        <tr key={slot.time} style={{ background: slot.available ? '#f0fdf4' : 'transparent' }}>
-                          <td className="text-bold flex">
-                            <Clock size={14} color="var(--primary)" />
-                            {slot.time}
-                          </td>
-                          <td>
-                            {slot.available ? (
-                              <span style={{
-                                background: '#dcfce7', color: '#15803d',
-                                padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700
-                              }}>
-                                AVAILABLE
-                              </span>
-                            ) : slot.status === 'OFF_DUTY' ? (
-                              <span style={{
-                                background: '#f3f4f6', color: '#6b7280',
-                                padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600
-                              }}>
-                                OFF DUTY
-                              </span>
-                            ) : slot.status === 'UNAVAILABLE' ? (
-                              <span style={{
-                                background: '#fee2e2', color: '#dc2626',
-                                padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600
-                              }}>
-                                DOCTOR UNAVAILABLE
-                              </span>
-                            ) : (
-                              <Badge status={slot.status} />
-                            )}
-                          </td>
-                          <td>
-                            {slot.patient_name ? (
-                              <span className="text-bold">{slot.patient_name}</span>
-                            ) : (
-                              <span className="text-muted">—</span>
-                            )}
-                          </td>
-                          <td style={{ fontSize: 13 }}>
-                            {slot.reason || (slot.available ? 'Ready for patient assignment' : '—')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Doctor Modal */}
       {showModal && (
@@ -473,6 +474,6 @@ export default function Doctors() {
           </form>
         </Modal>
       )}
-    </>
+    </div>
   )
 }

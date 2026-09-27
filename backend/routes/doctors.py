@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime, date, timedelta
 from database import get_db
 from models.doctor import Doctor
 from models.appointment import Appointment
-from schemas.doctor import DoctorCreate, DoctorUpdate, DoctorResponse, DoctorAvailableResponse
+from schemas.doctor import (
+    DoctorCreate, DoctorUpdate, DoctorResponse,
+    DoctorAvailabilityResponse, AvailableDoctorItem, UnavailableDoctorItem
+)
 
 router = APIRouter(prefix="/api/doctors", tags=["Doctors"])
 
@@ -15,6 +18,15 @@ DAY_INDEX = {
     "friday": 4, "saturday": 5, "sunday": 6,
     "mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6
 }
+
+
+def format_time_12h(time_str: str) -> str:
+    """Converts '10:00' to '10:00 AM' and '14:00' to '2:00 PM'."""
+    try:
+        t = datetime.strptime(time_str, "%H:%M")
+        return t.strftime("%I:%M %p").lstrip("0")
+    except Exception:
+        return time_str
 
 
 def is_doctor_working_on_date(available_days: str, target_date: date) -> bool:
@@ -55,36 +67,44 @@ def is_doctor_working_on_date(available_days: str, target_date: date) -> bool:
     return False
 
 
-def is_doctor_available_at(doctor: Doctor, target_date: date, target_time: str, db: Session) -> bool:
-    """Checks all 4 availability conditions for a doctor:
-    1. Doctor is marked 'Available'.
-    2. Selected date falls within their working days.
-    3. Selected time falls within their working hours.
-    4. Doctor does NOT already have an active appointment at that exact time.
+def check_doctor_availability(
+    doctor: Doctor,
+    target_date: date,
+    target_time: str,
+    db: Session
+) -> Tuple[bool, Optional[str]]:
+    """Evaluates the 5 doctor availability conditions:
+    1. Doctor exists (checked by caller).
+    2. Doctor status is Available.
+    3. Doctor works on the selected day.
+    4. Selected time falls within doctor's working hours.
+    5. Doctor does not already have a Scheduled appointment at that date & time.
+       (Completed and Cancelled appointments do NOT block the slot).
+    Returns (True, None) if available, or (False, reason) if unavailable.
     """
     if doctor.status != "Available":
-        return False
+        return False, "Doctor is marked unavailable."
 
     if not is_doctor_working_on_date(doctor.available_days, target_date):
-        return False
+        return False, "Doctor is not working on this day."
 
     # Check working hours: start_time <= target_time < end_time
     if not (doctor.start_time <= target_time < doctor.end_time):
-        return False
+        return False, "Outside doctor's working hours."
 
-    # Check existing active appointment conflict
+    # Check conflicting scheduled appointment (only Scheduled blocks availability)
     target_date_str = target_date.isoformat()
-    conflict = db.query(Appointment).filter(
+    scheduled_appt = db.query(Appointment).filter(
         Appointment.doctor_id == doctor.id,
         Appointment.appointment_date == target_date_str,
         Appointment.appointment_time == target_time,
-        Appointment.status != "Cancelled"
+        Appointment.status == "Scheduled"
     ).first()
 
-    if conflict:
-        return False
+    if scheduled_appt:
+        return False, "Already booked at this time."
 
-    return True
+    return True, None
 
 
 @router.get("/", response_model=List[DoctorResponse])
@@ -101,36 +121,78 @@ def list_doctors(
     return query.order_by(Doctor.name).all()
 
 
-@router.get("/available", response_model=List[DoctorAvailableResponse])
+@router.get("/available", response_model=DoctorAvailabilityResponse)
 def get_available_doctors(
     date_str: str = Query(..., alias="date", description="Date YYYY-MM-DD"),
     time_str: str = Query(..., alias="time", description="Time HH:MM"),
     db: Session = Depends(get_db)
 ):
-    """Returns all doctors who are available for the given date and time."""
+    """Categorizes all doctors into available and unavailable with clear reasons."""
+    # 1. Date validation
+    if not date_str or not date_str.strip():
+        raise HTTPException(status_code=400, detail="Please select an appointment date.")
+
     try:
-        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        target_date = datetime.strptime(date_str.strip(), "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Expected YYYY-MM-DD.")
 
+    if target_date < date.today():
+        raise HTTPException(status_code=400, detail="Please select today or a future date.")
+
+    # 2. Time validation
+    if not time_str or not time_str.strip():
+        raise HTTPException(status_code=400, detail="Please select an appointment time.")
+
+    try:
+        # validate HH:MM
+        datetime.strptime(time_str.strip(), "%H:%M")
+        valid_time_str = time_str.strip()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid time format. Expected HH:MM.")
+
     doctors = db.query(Doctor).all()
-    available_doctors = []
+    available_list = []
+    unavailable_list = []
 
     for d in doctors:
-        if is_doctor_available_at(d, target_date, time_str, db):
-            available_doctors.append({
-                "id": d.id,
-                "name": d.name,
-                "specialization": d.specialization,
-                "phone": d.phone,
-                "available_days": d.available_days,
-                "start_time": d.start_time,
-                "end_time": d.end_time,
-                "status": d.status,
-                "available": True
-            })
+        hours_display = f"{format_time_12h(d.start_time)} - {format_time_12h(d.end_time)}"
+        is_avail, reason = check_doctor_availability(d, target_date, valid_time_str, db)
 
-    return available_doctors
+        if is_avail:
+            available_list.append(AvailableDoctorItem(
+                id=d.id,
+                name=d.name,
+                specialization=d.specialization,
+                phone=d.phone,
+                available_days=d.available_days,
+                start_time=d.start_time,
+                end_time=d.end_time,
+                working_hours=hours_display,
+                status=d.status,
+                available=True
+            ))
+        else:
+            unavailable_list.append(UnavailableDoctorItem(
+                id=d.id,
+                name=d.name,
+                specialization=d.specialization,
+                phone=d.phone,
+                available_days=d.available_days,
+                start_time=d.start_time,
+                end_time=d.end_time,
+                working_hours=hours_display,
+                status=d.status,
+                reason=reason or "Unavailable",
+                available=False
+            ))
+
+    return DoctorAvailabilityResponse(
+        date=date_str,
+        time=valid_time_str,
+        available_doctors=available_list,
+        unavailable_doctors=unavailable_list
+    )
 
 
 @router.get("/{doctor_id}", response_model=DoctorResponse)
@@ -199,7 +261,7 @@ def get_doctor_schedule(
 
     works_today = is_doctor_working_on_date(doctor.available_days, target_date)
 
-    # Fetch appointments for this doctor on that date
+    # Fetch appointments for this doctor on that date (excluding cancelled)
     appointments = db.query(Appointment).filter(
         Appointment.doctor_id == doctor.id,
         Appointment.appointment_date == date_str,

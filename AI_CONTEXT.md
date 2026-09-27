@@ -8,8 +8,8 @@
 
 A lightweight clinic coordination dashboard for managing:
 1. Patient registration & search
-2. Doctor management, availability checking & daily schedules
-3. Appointment booking, doctor assignment & status scheduling
+2. Doctor management, automated availability checks & daily schedule viewer
+3. Appointment booking, manual doctor selection & status scheduling
 4. Follow-up reminders & tracking
 5. Patient visit history
 6. Ambulance requests & Fleet availability/location management
@@ -129,24 +129,37 @@ A lightweight clinic coordination dashboard for managing:
 
 ---
 
-## DOCTOR AVAILABILITY LOGIC
+## DOCTOR AVAILABILITY ENGINE
 
-A doctor is available at a given `date` and `time` if:
-1. `doctor.status == "Available"`
-2. Selected date falls within their working days (checked via `is_doctor_working_on_date`).
-3. Selected time falls within their working hours (`start_time <= time < end_time`).
-4. Doctor has no active appointment (`status != "Cancelled"`) at that exact date and time.
+A doctor is considered **AVAILABLE** only if ALL 5 conditions are met:
+1. **Doctor exists**
+2. **Doctor status** is `Available`
+3. **Working days:** Target date falls within doctor's working days (`is_doctor_working_on_date`).
+4. **Working hours:** Target time is within working hours (`start_time <= target_time < end_time`).
+5. **No conflicting booking:** Doctor does not already have a `Scheduled` appointment at that exact date and time.
+   - `Scheduled` appointments block availability.
+   - `Completed` and `Cancelled` appointments do NOT block availability.
+
+If any condition fails, doctor is returned under `unavailable_doctors` with a precise reason:
+- *"Doctor is not working on this day."*
+- *"Outside doctor's working hours."*
+- *"Already booked at this time."*
+- *"Doctor is marked unavailable."*
 
 ---
 
-## APPOINTMENT ASSIGNMENT WORKFLOW
+## APPOINTMENT BOOKING WORKFLOW
 
 1. Staff selects Patient, Date, and Time in the Booking Modal.
-2. The UI automatically queries `/api/doctors/available?date=YYYY-MM-DD&time=HH:MM`.
-3. Available doctors are displayed with their specialization and hours.
-4. Staff selects the doctor.
-5. On submit, backend re-validates availability (checking status, working days, working hours, and conflicts).
-6. Appointment is booked and linked to the doctor; doctor schedule updates in real-time.
+2. Staff clicks **[ Check Doctor Availability ]** (with frontend validation for date/time).
+3. The system queries `GET /api/doctors/available?date=YYYY-MM-DD&time=HH:MM`.
+4. The system presents:
+   - **AVAILABLE DOCTORS** (with manual `[ Select ]` button)
+   - **UNAVAILABLE DOCTORS** (with refusal reasons)
+5. Staff manually selects an available doctor (NO automatic assignment).
+6. Staff clicks **Book Appointment**.
+7. Backend performs final authoritative validation check before saving.
+8. Appointment is committed to database and doctor's schedule updates in real-time.
 
 ---
 
@@ -158,11 +171,11 @@ A doctor is available at a given `date` and `time` if:
 - `GET  /api/doctors/{id}`             → get doctor details
 - `PATCH /api/doctors/{id}`            → update doctor info / status
 - `DELETE /api/doctors/{id}`           → delete doctor
-- `GET  /api/doctors/available?date=...&time=...` → available doctors
+- `GET  /api/doctors/available?date=...&time=...` → returns `{ available_doctors: [...], unavailable_doctors: [...] }`
 - `GET  /api/doctors/{id}/schedule?date=...`     → doctor schedule slots
 - `POST /api/patients/`                → create patient
 - `GET  /api/patients/?search=...`     → list + search
-- `POST /api/appointments/`            → book appointment with optional doctor assignment
+- `POST /api/appointments/`            → book appointment with optional doctor assignment & final validation
 - `GET  /api/appointments/?date_filter=&status=&severity=&doctor_id=` → list filtered
 - `GET  /api/appointments/followups?upcoming_days=` → list pending follow-ups
 - `GET  /api/appointments/history/{patient_id}`     → patient visit history
@@ -195,13 +208,11 @@ A doctor is available at a given `date` and `time` if:
 
 ## CURRENT STATUS
 
-- [x] Backend complete (FastAPI + SQLAlchemy + SQLite v2.1)
+- [x] Backend complete (FastAPI + SQLAlchemy + SQLite v2.2)
 - [x] All 7 tables + 8 API routers
-- [x] Doctor management, availability checking, and schedule slots
-- [x] Doctor assignment during appointment booking with backend double-booking validation
-- [x] Frontend complete (React + Vite)
-- [x] All 8 pages & components built and verified
-- [x] Seed data script (Patients, Doctors, Appts, Follow-ups, Ambulances, Fleet, Blood, Hospitals)
-- [x] Dockerfile
-- [x] 33/33 API Smoke Tests passing (including edge cases & conflict rejection)
+- [x] Doctor availability engine returning categorized available & unavailable doctors with exact reasons
+- [x] Scheduled appointments block availability; Completed and Cancelled do not
+- [x] Frontend booking modal with [ Check Doctor Availability ] button and manual doctor selection
+- [x] Authoritative backend validation on appointment creation
+- [x] 22/22 automated test assertions passing across all 9 specified test scenarios
 - [x] Production build passing (0 errors)

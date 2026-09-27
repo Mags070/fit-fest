@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { Building2, Phone, MapPin, Plus, CheckCircle, Search, Filter } from 'lucide-react'
 import axios from 'axios'
 import Modal from '../components/Modal'
+import { Badge } from '../components/Badge'
+import PageHeader from '../components/PageHeader'
+import Button from '../components/ui/Button'
 
 const TYPES = ['Hospital', 'Clinic', 'Blood Bank', 'Pharmacy']
 
@@ -71,121 +74,151 @@ export default function Hospitals() {
   }
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <h2>🏥 Nearby Hospitals & Clinics</h2>
-          <p>Directory of nearby healthcare facilities</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
-          <Plus size={16} /> Add Facility
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        title="Hospital & Clinic Network"
+        description="Directory of regional partner hospitals, specialty clinics, blood banks, and 24h emergency centers"
+        badge={
+          <span className="std-header-badge">
+            <Building2 size={13} style={{ color: 'var(--primary)' }} />
+            <span>{hospitals.length} Facilities Listed</span>
+          </span>
+        }
+        action={
+          <Button variant="default" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
+            <Plus size={16} /> Add Facility
+          </Button>
+        }
+      />
 
-      <div className="page-content">
-        {alert && (
-          <div className={`alert alert-${alert.type}`}>
-            <CheckCircle size={16} /> {alert.msg}
-          </div>
+      {alert && (
+        <div className={`alert alert-${alert.type}`} style={{ marginBottom: 16 }}>
+          <CheckCircle size={16} /> {alert.msg}
+        </div>
+      )}
+
+      {/* Standard Compact Filter Bar */}
+      <div className="std-filter-bar">
+        <span className="std-filter-label">
+          <Filter size={14} /> Type:
+        </span>
+        <select
+          className="form-control"
+          style={{ width: 140, height: 36, fontSize: 13 }}
+          value={filterType}
+          onChange={e => setFilterType(e.target.value)}
+        >
+          <option value="">All Types</option>
+          {TYPES.map(t => <option key={t}>{t}</option>)}
+        </select>
+
+        <span className="std-filter-label" style={{ marginLeft: 8 }}>
+          <MapPin size={14} /> Location:
+        </span>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: 220 }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, color: 'var(--muted-foreground)' }} />
+          <input
+            className="form-control"
+            style={{ paddingLeft: 30, height: 36, fontSize: 13 }}
+            placeholder="Filter by location..."
+            value={filterLocation}
+            onChange={e => setFilterLocation(e.target.value)}
+          />
+        </div>
+
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', marginLeft: 8 }}>
+          <input
+            type="checkbox"
+            checked={filterEmergency}
+            onChange={e => setFilterEmergency(e.target.checked)}
+          />
+          <span style={{ fontWeight: 500 }}>24h Emergency only</span>
+        </label>
+
+        {(filterType || filterLocation || filterEmergency) && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setFilterType(''); setFilterLocation(''); setFilterEmergency(false) }}
+          >
+            Clear Filters
+          </button>
         )}
 
-        {/* Filters */}
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-body" style={{ padding: '12px 20px' }}>
-            <div className="flex" style={{ flexWrap: 'wrap', gap: 10 }}>
-              <Filter size={16} color="var(--gray-500)" />
-              <select className="form-control" style={{ width: 150 }}
-                value={filterType} onChange={e => setFilterType(e.target.value)}>
-                <option value="">All Types</option>
-                {TYPES.map(t => <option key={t}>{t}</option>)}
-              </select>
-              <div className="search-wrap">
-                <Search size={16} />
-                <input className="form-control search-input" placeholder="Filter by location..."
-                  value={filterLocation}
-                  onChange={e => setFilterLocation(e.target.value)} />
-              </div>
-              <label className="flex" style={{ cursor: 'pointer', gap: 6, fontSize: 13 }}>
-                <input type="checkbox" checked={filterEmergency}
-                  onChange={e => setFilterEmergency(e.target.checked)} />
-                24h Emergency only
-              </label>
-              {(filterType || filterLocation || filterEmergency) && (
-                <button className="btn btn-ghost btn-sm"
-                  onClick={() => { setFilterType(''); setFilterLocation(''); setFilterEmergency(false) }}>
-                  Clear
-                </button>
-              )}
-            </div>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted-foreground)' }}>
+          {hospitals.length} facilities found
+        </span>
+      </div>
+
+      {/* Cards grid */}
+      {loading ? (
+        <div className="loader"><div className="spinner" /></div>
+      ) : hospitals.length === 0 ? (
+        <div className="table-card">
+          <div className="empty-state">
+            <Building2 size={40} />
+            <p>No facilities found matching your criteria.</p>
           </div>
         </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+          {hospitals.map(h => {
+            const badgeVariant = {
+              Hospital: 'primary',
+              Clinic: 'success',
+              'Blood Bank': 'destructive',
+              Pharmacy: 'warning',
+            }[h.type] || 'secondary'
 
-        {/* Cards grid */}
-        {loading ? (
-          <div className="loader"><div className="spinner" /></div>
-        ) : hospitals.length === 0 ? (
-          <div className="card">
-            <div className="empty-state">
-              <Building2 size={40} />
-              <p>No facilities found.</p>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {hospitals.map(h => {
-              const tc = typeColor[h.type] || { bg: '#f3f4f6', color: '#4b5563' }
-              return (
-                <div key={h.id} className="card">
-                  <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)' }}>
+            return (
+              <div key={h.id} className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
                     <div className="flex-between">
-                      <div className="flex">
+                      <div className="flex" style={{ gap: 10 }}>
                         <span style={{ fontSize: 22 }}>{typeIcon[h.type] || '🏥'}</span>
                         <div>
-                          <div className="text-bold" style={{ fontSize: 15 }}>{h.name}</div>
-                          <span style={{
-                            ...tc, padding: '2px 8px', borderRadius: 999,
-                            fontSize: 11, fontWeight: 600
-                          }}>{h.type}</span>
+                          <div className="text-bold" style={{ fontSize: 14.5 }}>{h.name}</div>
+                          <Badge variant={badgeVariant} style={{ marginTop: 3 }}>{h.type}</Badge>
                         </div>
                       </div>
                       {h.emergency_24h && (
-                        <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
-                          24h
-                        </span>
+                        <Badge variant="destructive" dot>
+                          24h ER
+                        </Badge>
                       )}
                     </div>
                   </div>
-                  <div style={{ padding: '12px 20px' }}>
-                    <div className="info-row flex" style={{ fontSize: 13, color: 'var(--gray-600)', marginBottom: 6 }}>
-                      <MapPin size={14} style={{ flexShrink: 0 }} />
+                  <div style={{ padding: '14px 18px' }}>
+                    <div className="info-row flex" style={{ fontSize: 13, color: 'var(--foreground)', marginBottom: 6, gap: 6 }}>
+                      <MapPin size={14} style={{ flexShrink: 0, color: 'var(--muted-foreground)' }} />
                       <span>{h.address}</span>
                     </div>
-                    <div className="flex" style={{ fontSize: 13, color: 'var(--gray-600)', marginBottom: 6, gap: 8 }}>
+                    <div className="flex" style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 6, gap: 6 }}>
                       <Phone size={14} style={{ flexShrink: 0 }} />
                       <span>{h.phone}</span>
                     </div>
                     {h.speciality && (
-                      <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>
-                        Speciality: <strong>{h.speciality}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4 }}>
+                        Speciality: <strong style={{ color: 'var(--foreground)' }}>{h.speciality}</strong>
                       </div>
                     )}
                     {h.distance_km != null && (
-                      <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>
-                        Distance: <strong>{h.distance_km} km</strong>
+                      <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 2 }}>
+                        Distance: <strong style={{ color: 'var(--foreground)' }}>{h.distance_km} km</strong>
                       </div>
                     )}
                   </div>
-                  <div style={{ padding: '8px 20px', borderTop: '1px solid var(--gray-100)', display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="btn btn-ghost btn-sm"
-                      style={{ color: 'var(--danger)' }}
-                      onClick={() => handleDelete(h.id)}>Remove</button>
-                  </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+                <div style={{ padding: '10px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--secondary)' }}>
+                  <button className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--danger)' }}
+                    onClick={() => handleDelete(h.id)}>Remove</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Add Modal */}
       {showModal && (
@@ -251,6 +284,6 @@ export default function Hospitals() {
           </form>
         </Modal>
       )}
-    </>
+    </div>
   )
 }

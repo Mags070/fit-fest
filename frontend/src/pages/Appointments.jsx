@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Plus, CheckCircle, Filter, UserCheck, Clock } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Plus, CheckCircle, Filter, UserCheck, Clock, Check, X, AlertTriangle, Calendar as CalendarIcon } from 'lucide-react'
 import {
   getAppointments, createAppointment, updateApptStatus,
   deleteAppointment, getPatients, getDoctors, getAvailableDoctors
 } from '../services/api'
 import Modal from '../components/Modal'
 import { Badge } from '../components/Badge'
+import PageHeader from '../components/PageHeader'
+import Button from '../components/ui/Button'
+import ActivityHeatmap from '../components/ui/ActivityHeatmap'
 
 const STATUSES   = ['Scheduled', 'Completed', 'Cancelled']
 const SEVERITIES = ['ROUTINE', 'URGENT', 'CRITICAL']
@@ -16,14 +20,18 @@ const emptyForm = {
   patient_id: '',
   doctor_id: '',
   appointment_date: new Date().toISOString().split('T')[0],
-  appointment_time: '10:00',
+  appointment_time: '10:30',
   reason: 'General Consultation',
   status: 'Scheduled',
   severity: 'ROUTINE',
 }
 
 export default function Appointments() {
+  const [searchParams] = useSearchParams()
+  const initialDate = searchParams.get('date') || ''
+
   const [appts, setAppts]       = useState([])
+  const [allAppts, setAllAppts] = useState([])
   const [patients, setPatients] = useState([])
   const [doctors, setDoctors]   = useState([])
   const [loading, setLoading]   = useState(true)
@@ -36,11 +44,12 @@ export default function Appointments() {
   const [filterStatus, setFilterStatus]     = useState('')
   const [filterSeverity, setFilterSeverity] = useState('')
   const [filterDoctor, setFilterDoctor]     = useState('')
-  const [filterDate, setFilterDate]         = useState('')
+  const [filterDate, setFilterDate]         = useState(initialDate)
 
-  // Available Doctors in Modal
-  const [availableDoctors, setAvailableDoctors] = useState([])
-  const [loadingAvailable, setLoadingAvailable] = useState(false)
+  // Availability Check State in Modal
+  const [availabilityData, setAvailabilityData] = useState(null) // { available_doctors: [], unavailable_doctors: [] }
+  const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState(null)
 
   const fetchAll = () => {
     setLoading(true)
@@ -52,35 +61,74 @@ export default function Appointments() {
     getAppointments(params).then(r => setAppts(r.data)).finally(() => setLoading(false))
   }
 
+  const fetchHeatmapData = () => {
+    getAppointments().then(r => setAllAppts(r.data || [])).catch(() => {})
+  }
+
   useEffect(() => { fetchAll() }, [filterStatus, filterSeverity, filterDoctor, filterDate])
   useEffect(() => {
+    fetchHeatmapData()
     getPatients().then(r => setPatients(r.data))
     getDoctors().then(r => setDoctors(r.data))
   }, [])
 
-  // Whenever modal is open and date/time change, check available doctors
-  useEffect(() => {
-    if (showModal && form.appointment_date && form.appointment_time) {
-      setLoadingAvailable(true)
-      getAvailableDoctors(form.appointment_date, form.appointment_time)
-        .then(r => {
-          setAvailableDoctors(r.data)
-          // If current selected doctor is not available, reset or auto-select first available
-          if (form.doctor_id) {
-            const stillAvailable = r.data.some(d => d.id === parseInt(form.doctor_id))
-            if (!stillAvailable) {
-              setForm(prev => ({ ...prev, doctor_id: '' }))
-            }
-          }
-        })
-        .catch(() => setAvailableDoctors([]))
-        .finally(() => setLoadingAvailable(false))
+  const openBookModal = () => {
+    setForm(emptyForm)
+    setAvailabilityData(null)
+    setAvailabilityError(null)
+    setShowModal(true)
+  }
+
+  const handleCheckAvailability = async () => {
+    setAvailabilityError(null)
+
+    // Validation
+    if (!form.appointment_date) {
+      setAvailabilityError('Please select an appointment date.')
+      return
     }
-  }, [showModal, form.appointment_date, form.appointment_time])
+    if (!form.appointment_time) {
+      setAvailabilityError('Please select an appointment time.')
+      return
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    if (form.appointment_date < todayStr) {
+      setAvailabilityError('Please select today or a future date.')
+      return
+    }
+
+    setCheckingAvailability(true)
+    try {
+      const res = await getAvailableDoctors(form.appointment_date, form.appointment_time)
+      setAvailabilityData(res.data)
+
+      // If previously selected doctor is now unavailable in this check, reset selection
+      if (form.doctor_id) {
+        const stillAvail = res.data.available_doctors?.some(d => d.id === parseInt(form.doctor_id))
+        if (!stillAvail) {
+          setForm(prev => ({ ...prev, doctor_id: '' }))
+        }
+      }
+    } catch (err) {
+      setAvailabilityError(err.response?.data?.detail || 'Unable to check doctor availability.')
+      setAvailabilityData(null)
+    } finally {
+      setCheckingAvailability(false)
+    }
+  }
+
+  const handleSelectDoctor = (doc) => {
+    setForm(prev => ({ ...prev, doctor_id: doc.id }))
+  }
+
+  const handleDeselectDoctor = () => {
+    setForm(prev => ({ ...prev, doctor_id: '' }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.patient_id) return showAlert('error', 'Please select a patient')
+    if (!form.patient_id) return showAlert('error', 'Please select a patient.')
     setSaving(true)
     try {
       const payload = {
@@ -89,11 +137,11 @@ export default function Appointments() {
         doctor_id: form.doctor_id ? parseInt(form.doctor_id) : null
       }
       await createAppointment(payload)
-      showAlert('success', 'Appointment booked and doctor assigned successfully')
+      showAlert('success', 'Appointment created successfully!')
       setShowModal(false)
       fetchAll()
     } catch (err) {
-      showAlert('error', err.response?.data?.detail || 'Failed to book appointment')
+      showAlert('error', err.response?.data?.detail || 'Failed to book appointment.')
     } finally {
       setSaving(false)
     }
@@ -117,66 +165,110 @@ export default function Appointments() {
 
   const showAlert = (type, msg) => {
     setAlert({ type, msg })
-    setTimeout(() => setAlert(null), 3000)
+    setTimeout(() => setAlert(null), 3500)
   }
 
+  const selectedDoctorObj = form.doctor_id
+    ? (availabilityData?.available_doctors?.find(d => d.id === parseInt(form.doctor_id)) ||
+       doctors.find(d => d.id === parseInt(form.doctor_id)))
+    : null
+
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <h2>Appointments</h2>
-          <p>Book, view, and assign doctors to patient appointments</p>
+    <div>
+      <PageHeader
+        title="Appointments & Consultations"
+        description="Book, check real-time doctor availability, triage acuity, and inspect appointment density"
+        badge={
+          <span className="std-header-badge">
+            <CalendarIcon size={13} style={{ color: 'var(--primary)' }} />
+            <span>{appts.length} Records</span>
+          </span>
+        }
+        action={
+          <Button variant="default" onClick={openBookModal}>
+            <Plus size={16} /> Book Appointment
+          </Button>
+        }
+      />
+
+      {alert && (
+        <div className={`alert alert-${alert.type}`} style={{ marginBottom: 16 }}>
+          <CheckCircle size={16} /> {alert.msg}
         </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
-          <Plus size={16} /> Book Appointment
-        </button>
+      )}
+
+      {/* Heatmap Calendar Activity Density */}
+      <div style={{ marginBottom: 20 }}>
+        <ActivityHeatmap
+          appointments={allAppts}
+          weeksToShow={22}
+          selectedDate={filterDate}
+          onDateClick={(date) => {
+            setFilterDate(prev => prev === date ? '' : date)
+          }}
+        />
       </div>
 
-      <div className="page-content">
-        {alert && (
-          <div className={`alert alert-${alert.type}`}>
-            <CheckCircle size={16} /> {alert.msg}
-          </div>
+      {/* Compact Standard Filter Bar */}
+      <div className="std-filter-bar">
+        <span className="std-filter-label">
+          <Filter size={14} /> Filter:
+        </span>
+        <select
+          className="form-control"
+          style={{ width: 140, height: 34, fontSize: 13 }}
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+        >
+          <option value="">All Statuses</option>
+          {STATUSES.map(s => <option key={s}>{s}</option>)}
+        </select>
+        <select
+          className="form-control"
+          style={{ width: 140, height: 34, fontSize: 13 }}
+          value={filterSeverity}
+          onChange={e => setFilterSeverity(e.target.value)}
+        >
+          <option value="">All Severities</option>
+          {SEVERITIES.map(s => <option key={s}>{s}</option>)}
+        </select>
+        <select
+          className="form-control"
+          style={{ width: 180, height: 34, fontSize: 13 }}
+          value={filterDoctor}
+          onChange={e => setFilterDoctor(e.target.value)}
+        >
+          <option value="">All Doctors</option>
+          {doctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <input
+          type="date"
+          className="form-control"
+          style={{ width: 150, height: 34, fontSize: 13 }}
+          value={filterDate}
+          onChange={e => setFilterDate(e.target.value)}
+        />
+        {(filterStatus || filterSeverity || filterDoctor || filterDate) && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterDoctor(''); setFilterDate('') }}
+          >
+            Clear Filters
+          </button>
         )}
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted-foreground)' }}>
+          {appts.length} appointments found
+        </span>
+      </div>
 
-        {/* Filters */}
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-body" style={{ paddingTop: 12, paddingBottom: 12 }}>
-            <div className="flex" style={{ flexWrap: 'wrap', gap: 10 }}>
-              <Filter size={16} color="var(--gray-500)" />
-              <span className="text-muted">Filter:</span>
-              <select className="form-control" style={{ width: 140 }}
-                value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="">All Statuses</option>
-                {STATUSES.map(s => <option key={s}>{s}</option>)}
-              </select>
-              <select className="form-control" style={{ width: 140 }}
-                value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
-                <option value="">All Severities</option>
-                {SEVERITIES.map(s => <option key={s}>{s}</option>)}
-              </select>
-              <select className="form-control" style={{ width: 180 }}
-                value={filterDoctor} onChange={e => setFilterDoctor(e.target.value)}>
-                <option value="">All Doctors</option>
-                {doctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              <input type="date" className="form-control" style={{ width: 160 }}
-                value={filterDate} onChange={e => setFilterDate(e.target.value)} />
-              {(filterStatus || filterSeverity || filterDoctor || filterDate) && (
-                <button className="btn btn-ghost btn-sm"
-                  onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterDoctor(''); setFilterDate('') }}>
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
+      {/* Standard Table Card */}
+      <div className="table-card">
+        <div className="table-card-header">
+          <h3 className="table-card-title">Appointments Directory ({appts.length})</h3>
+          <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+            {filterDate ? `Showing date: ${filterDate}` : 'All scheduled & past encounters'}
+          </span>
         </div>
-
-        {/* Table */}
-        <div className="card">
-          <div className="card-header">
-            <h3>Appointments ({appts.length})</h3>
-          </div>
           {loading ? (
             <div className="loader"><div className="spinner" /></div>
           ) : appts.length === 0 ? (
@@ -244,125 +336,232 @@ export default function Appointments() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Modal */}
+      {/* Book Appointment Modal */}
       {showModal && (
         <Modal
-          title="Book Appointment & Assign Doctor"
+          title="Book Appointment"
           onClose={() => setShowModal(false)}
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-                {saving ? 'Booking…' : 'Assign & Book'}
+                {saving ? 'Booking…' : 'Book Appointment'}
               </button>
             </>
           }
         >
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
+              {/* Patient */}
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>Patient *</label>
-                <select className="form-control" value={form.patient_id}
-                  onChange={e => setForm({ ...form, patient_id: e.target.value })} required>
+                <select
+                  className="form-control"
+                  value={form.patient_id}
+                  onChange={e => setForm({ ...form, patient_id: e.target.value })}
+                  required
+                >
                   <option value="">— Select patient —</option>
                   {patients.map(p => (
                     <option key={p.id} value={p.id}>{p.name} ({p.phone})</option>
                   ))}
                 </select>
               </div>
+
+              {/* Date */}
               <div className="form-group">
                 <label>Date *</label>
-                <input type="date" className="form-control" value={form.appointment_date}
-                  onChange={e => setForm({ ...form, appointment_date: e.target.value })} required />
+                <input
+                  type="date"
+                  className="form-control"
+                  value={form.appointment_date}
+                  onChange={e => {
+                    setForm({ ...form, appointment_date: e.target.value })
+                    setAvailabilityData(null)
+                  }}
+                  required
+                />
               </div>
+
+              {/* Time */}
               <div className="form-group">
                 <label>Time *</label>
-                <input type="time" className="form-control" value={form.appointment_time}
-                  onChange={e => setForm({ ...form, appointment_time: e.target.value })} required />
+                <input
+                  type="time"
+                  className="form-control"
+                  value={form.appointment_time}
+                  onChange={e => {
+                    setForm({ ...form, appointment_time: e.target.value })
+                    setAvailabilityData(null)
+                  }}
+                  required
+                />
               </div>
 
-              {/* Available Doctors Selector */}
+              {/* Check Doctor Availability Button */}
               <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-                <label style={{ fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>Available Doctors for {form.appointment_date} at {form.appointment_time}:</span>
-                  {loadingAvailable && <span className="text-muted" style={{ fontSize: 11 }}>Checking availability…</span>}
-                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={handleCheckAvailability}
+                  disabled={checkingAvailability}
+                >
+                  <UserCheck size={16} />
+                  {checkingAvailability ? 'Checking Availability…' : 'Check Doctor Availability'}
+                </button>
 
-                {loadingAvailable ? (
-                  <div style={{ padding: 10, textAlign: 'center', fontSize: 12, color: 'var(--gray-500)' }}>
-                    Checking doctor schedules…
-                  </div>
-                ) : availableDoctors.length === 0 ? (
+                {availabilityError && (
                   <div style={{
-                    padding: '12px 16px', background: '#fee2e2', borderRadius: 8,
-                    color: '#b91c1c', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8
+                    marginTop: 8, padding: '8px 12px', background: '#fee2e2',
+                    borderRadius: 6, color: '#dc2626', fontSize: 13, display: 'flex', gap: 6, alignItems: 'center'
                   }}>
-                    <span>⚠️</span>
-                    <span>No doctors available for the selected time. Please change time or proceed as unassigned.</span>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginTop: 4 }}>
-                    <div
-                      onClick={() => setForm({ ...form, doctor_id: '' })}
-                      style={{
-                        padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-                        border: !form.doctor_id ? '2px solid var(--primary)' : '1px solid var(--gray-200)',
-                        background: !form.doctor_id ? 'var(--primary-light)' : 'white'
-                      }}
-                    >
-                      <div className="text-bold" style={{ fontSize: 13 }}>No Doctor (Walk-in)</div>
-                      <div className="text-muted" style={{ fontSize: 11 }}>Leave unassigned</div>
-                    </div>
-                    {availableDoctors.map(doc => {
-                      const isSelected = String(form.doctor_id) === String(doc.id)
-                      return (
-                        <div
-                          key={doc.id}
-                          onClick={() => setForm({ ...form, doctor_id: doc.id })}
-                          style={{
-                            padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-                            border: isSelected ? '2px solid var(--primary)' : '1px solid var(--gray-200)',
-                            background: isSelected ? 'var(--primary-light)' : 'white',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <div className="flex-between">
-                            <div className="text-bold" style={{ fontSize: 13 }}>{doc.name}</div>
-                            <span style={{ fontSize: 10, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 999, fontWeight: 700 }}>
-                              Available
-                            </span>
-                          </div>
-                          <div className="text-muted" style={{ fontSize: 12 }}>{doc.specialization}</div>
-                          <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>
-                            Hours: {doc.start_time} - {doc.end_time} ({doc.available_days})
-                          </div>
-                        </div>
-                      )
-                    })}
+                    <AlertTriangle size={15} />
+                    <span>{availabilityError}</span>
                   </div>
                 )}
               </div>
 
+              {/* Selected Doctor Indicator */}
+              {selectedDoctorObj && (
+                <div className="doctor-selected-banner">
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Selected Doctor</div>
+                    <div className="text-bold" style={{ fontSize: 14 }}>{selectedDoctorObj.name}</div>
+                    <div className="text-muted" style={{ fontSize: 12 }}>{selectedDoctorObj.specialization}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--danger)' }}
+                    onClick={handleDeselectDoctor}
+                  >
+                    Deselect
+                  </button>
+                </div>
+              )}
+
+              {/* Availability Results Section */}
+              {availabilityData && (
+                <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+                  {/* AVAILABLE DOCTORS */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{
+                      fontSize: 12, fontWeight: 700, color: 'var(--success)',
+                      letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6
+                    }}>
+                      <span>✓</span> AVAILABLE DOCTORS ({availabilityData.available_doctors?.length || 0})
+                    </div>
+
+                    {(!availabilityData.available_doctors || availabilityData.available_doctors.length === 0) ? (
+                      <div className="alert alert-warning" style={{
+                        padding: '12px 16px', borderRadius: 8,
+                        fontSize: 13, display: 'flex', alignItems: 'center', gap: 8,
+                        backgroundColor: 'var(--warning-light)', color: 'var(--warning)'
+                      }}>
+                        <AlertTriangle size={16} />
+                        <span>No doctors are available for the selected time.</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                        {availabilityData.available_doctors.map(doc => {
+                          const isSelected = String(form.doctor_id) === String(doc.id)
+                          return (
+                            <div
+                              key={doc.id}
+                              className={`doctor-card-box avail ${isSelected ? 'selected' : ''}`}
+                            >
+                              <div>
+                                <div className="flex-between">
+                                  <div className="text-bold doc-name-avail">
+                                    ✓ {doc.name}
+                                  </div>
+                                </div>
+                                <div className="doc-spec-avail" style={{ marginTop: 2 }}>{doc.specialization}</div>
+                                <div className="doc-time-avail" style={{ marginTop: 4 }}>
+                                  {doc.working_hours || `${doc.start_time} - ${doc.end_time}`}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
+                                style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                                onClick={() => handleSelectDoctor(doc)}
+                              >
+                                {isSelected ? <><Check size={14} /> Selected</> : `Select ${doc.name.split(' ')[1] || doc.name}`}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* UNAVAILABLE DOCTORS */}
+                  {availabilityData.unavailable_doctors && availabilityData.unavailable_doctors.length > 0 && (
+                    <div>
+                      <div style={{
+                        fontSize: 12, fontWeight: 700, color: 'var(--danger)',
+                        letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6
+                      }}>
+                        <span>✕</span> UNAVAILABLE DOCTORS ({availabilityData.unavailable_doctors.length})
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                        {availabilityData.unavailable_doctors.map(doc => (
+                          <div
+                            key={doc.id}
+                            className="doctor-card-box unavail"
+                          >
+                            <div className="text-bold doc-name-unavail">
+                              ✕ {doc.name}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{doc.specialization}</div>
+                            <div>
+                              <span className="doc-reason-unavail">
+                                Reason: {doc.reason}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Reason */}
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>Reason for Visit *</label>
-                <select className="form-control" value={form.reason}
-                  onChange={e => setForm({ ...form, reason: e.target.value })}>
+                <select
+                  className="form-control"
+                  value={form.reason}
+                  onChange={e => setForm({ ...form, reason: e.target.value })}
+                >
                   {REASONS.map(r => <option key={r}>{r}</option>)}
                 </select>
               </div>
+
+              {/* Severity */}
               <div className="form-group">
                 <label>Patient Severity *</label>
-                <select className="form-control" value={form.severity}
-                  onChange={e => setForm({ ...form, severity: e.target.value })}>
+                <select
+                  className="form-control"
+                  value={form.severity}
+                  onChange={e => setForm({ ...form, severity: e.target.value })}
+                >
                   {SEVERITIES.map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
+
+              {/* Initial Status */}
               <div className="form-group">
                 <label>Initial Status</label>
-                <select className="form-control" value={form.status}
-                  onChange={e => setForm({ ...form, status: e.target.value })}>
+                <select
+                  className="form-control"
+                  value={form.status}
+                  onChange={e => setForm({ ...form, status: e.target.value })}
+                >
                   {STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
@@ -370,6 +569,6 @@ export default function Appointments() {
           </form>
         </Modal>
       )}
-    </>
+    </div>
   )
 }

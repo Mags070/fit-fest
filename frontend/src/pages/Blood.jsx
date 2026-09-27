@@ -3,6 +3,8 @@ import { Plus, Search, Droplets, CheckCircle, Trash2 } from 'lucide-react'
 import { getBlood, createBlood, deleteBlood } from '../services/api'
 import Modal from '../components/Modal'
 import { Badge } from '../components/Badge'
+import PageHeader from '../components/PageHeader'
+import Button from '../components/ui/Button'
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 const CITIES = ['Pune', 'Pimpri', 'Chinchwad', 'Hadapsar', 'Kothrud', 'Wakad', 'Hinjewadi', 'Viman Nagar']
@@ -69,132 +71,142 @@ export default function Blood() {
   }
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <h2>🩸 Blood Search</h2>
-          <p>Search blood availability by group and location</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
-          <Plus size={16} /> Add Record
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        title="Blood Bank Inventory & Availability"
+        description="Search real-time blood stock across partnered blood banks and regional donation centers"
+        badge={
+          <span className="std-header-badge">
+            <Droplets size={13} style={{ color: '#db2777' }} />
+            <span>{records.length} Units Listed</span>
+          </span>
+        }
+        action={
+          <Button variant="default" onClick={() => { setForm(emptyForm); setShowModal(true) }}>
+            <Plus size={16} /> Add Blood Record
+          </Button>
+        }
+      />
 
-      <div className="page-content">
-        {alert && (
-          <div className={`alert alert-${alert.type}`}>
-            <CheckCircle size={16} /> {alert.msg}
-          </div>
+      {alert && (
+        <div className={`alert alert-${alert.type}`} style={{ marginBottom: 16 }}>
+          <CheckCircle size={16} /> {alert.msg}
+        </div>
+      )}
+
+      {/* Standard Filter Bar */}
+      <div className="std-filter-bar">
+        <span className="std-filter-label">
+          <Droplets size={14} /> Group:
+        </span>
+        <select
+          className="form-control"
+          style={{ width: 130, height: 36, fontSize: 13 }}
+          value={searchGroup}
+          onChange={e => setSearchGroup(e.target.value)}
+        >
+          <option value="">All Groups</option>
+          {BLOOD_GROUPS.map(g => <option key={g}>{g}</option>)}
+        </select>
+
+        <span className="std-filter-label" style={{ marginLeft: 8 }}>
+          Location:
+        </span>
+        <input
+          className="form-control"
+          placeholder="e.g. Pune, Hadapsar..."
+          style={{ width: 190, height: 36, fontSize: 13 }}
+          value={searchLoc}
+          onChange={e => setSearchLoc(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSearch() }}
+        />
+
+        <Button size="sm" variant="default" onClick={handleSearch}>
+          <Search size={14} /> Search
+        </Button>
+
+        {(searchGroup || searchLoc) && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setSearchGroup(''); setSearchLoc(''); fetchAll() }}
+          >
+            Clear
+          </button>
         )}
 
-        {/* Search panel */}
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div className="card-header">
-            <h3>Search Blood Availability</h3>
-          </div>
-          <div className="card-body">
-            <div className="flex" style={{ flexWrap: 'wrap', gap: 12 }}>
-              <div className="form-group" style={{ flex: '0 0 auto' }}>
-                <label>Blood Group</label>
-                <select className="form-control" style={{ width: 120 }}
-                  value={searchGroup} onChange={e => setSearchGroup(e.target.value)}>
-                  <option value="">All</option>
-                  {BLOOD_GROUPS.map(g => <option key={g}>{g}</option>)}
-                </select>
-              </div>
-              <div className="form-group" style={{ flex: '0 0 auto' }}>
-                <label>Location</label>
-                <input className="form-control" placeholder="e.g. Pune" style={{ width: 180 }}
-                  value={searchLoc} onChange={e => setSearchLoc(e.target.value)} />
-              </div>
-              <div className="form-group" style={{ alignSelf: 'flex-end' }}>
-                <button className="btn btn-primary" onClick={handleSearch}>
-                  <Search size={16} /> Search
-                </button>
-              </div>
-              {(searchGroup || searchLoc) && (
-                <div className="form-group" style={{ alignSelf: 'flex-end' }}>
-                  <button className="btn btn-ghost"
-                    onClick={() => { setSearchGroup(''); setSearchLoc(''); fetchAll() }}>
-                    Clear
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted-foreground)' }}>
+          {records.length} blood records found
+        </span>
+      </div>
+
+      {/* Results Table Card */}
+      <div className="table-card">
+        <div className="table-card-header">
+          <h3 className="table-card-title">
+            {searchGroup || searchLoc
+              ? `Results for ${searchGroup || 'All Groups'} in ${searchLoc || 'All Locations'}`
+              : 'All Blood Records'
+            } ({records.length})
+          </h3>
         </div>
 
-        {/* Results */}
-        <div className="card">
-          <div className="card-header">
-            <h3>
-              {searchGroup || searchLoc
-                ? `Results for ${searchGroup || 'All'} in ${searchLoc || 'All locations'}`
-                : 'All Blood Records'
-              } ({records.length})
-            </h3>
+        {loading ? (
+          <div className="loader"><div className="spinner" /></div>
+        ) : records.length === 0 ? (
+          <div className="empty-state">
+            <Droplets size={40} />
+            <p>No matching blood records found.</p>
+            {(searchGroup || searchLoc) && (
+              <p style={{ marginTop: 8, fontSize: 13, color: 'var(--muted-foreground)' }}>Try searching for a different blood group or area.</p>
+            )}
           </div>
-
-          {loading ? (
-            <div className="loader"><div className="spinner" /></div>
-          ) : records.length === 0 ? (
-            <div className="empty-state">
-              <Droplets size={40} />
-              <p>No matching blood records found.</p>
-              {(searchGroup || searchLoc) && (
-                <p style={{ marginTop: 8, fontSize: 13 }}>Try a different group or location.</p>
-              )}
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source</th>
-                    <th>Blood Group</th>
-                    <th>Location</th>
-                    <th>Units Available</th>
-                    <th>Contact</th>
-                    <th>Status</th>
-                    <th></th>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source / Blood Bank</th>
+                  <th>Blood Group</th>
+                  <th>Location</th>
+                  <th>Units Available</th>
+                  <th>Contact</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map(r => (
+                  <tr key={r.id}>
+                    <td className="text-bold">{r.source_name}</td>
+                    <td>
+                      <span className="blood-group-pill">{r.blood_group}</span>
+                    </td>
+                    <td>{r.location}</td>
+                    <td>
+                      <span style={{
+                        fontWeight: 700,
+                        color: r.units_available > 0 ? 'var(--success)' : 'var(--danger)'
+                      }}>
+                        {r.units_available} units
+                      </span>
+                    </td>
+                    <td>{r.contact}</td>
+                    <td><Badge status={r.status} /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--danger)' }}
+                        onClick={() => handleDelete(r.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {records.map(r => (
-                    <tr key={r.id}>
-                      <td className="text-bold">{r.source_name}</td>
-                      <td>
-                        <span style={{
-                          background: '#fce7f3', color: '#be185d',
-                          padding: '3px 10px', borderRadius: 999,
-                          fontSize: 12, fontWeight: 700
-                        }}>{r.blood_group}</span>
-                      </td>
-                      <td>{r.location}</td>
-                      <td>
-                        <span style={{
-                          fontWeight: 700,
-                          color: r.units_available > 0 ? 'var(--success)' : 'var(--danger)'
-                        }}>
-                          {r.units_available} units
-                        </span>
-                      </td>
-                      <td>{r.contact}</td>
-                      <td><Badge status={r.status} /></td>
-                      <td>
-                        <button className="btn btn-ghost btn-sm"
-                          style={{ color: 'var(--danger)' }}
-                          onClick={() => handleDelete(r.id)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Add Record Modal */}
@@ -252,6 +264,6 @@ export default function Blood() {
           </form>
         </Modal>
       )}
-    </>
+    </div>
   )
 }
