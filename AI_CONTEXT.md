@@ -148,18 +148,32 @@ If any condition fails, doctor is returned under `unavailable_doctors` with a pr
 
 ---
 
-## APPOINTMENT BOOKING WORKFLOW
+## APPOINTMENT BOOKING & AUTOMATIC DOCTOR ASSIGNMENT
 
-1. Staff selects Patient, Date, and Time in the Booking Modal.
-2. Staff clicks **[ Check Doctor Availability ]** (with frontend validation for date/time).
-3. The system queries `GET /api/doctors/available?date=YYYY-MM-DD&time=HH:MM`.
-4. The system presents:
-   - **AVAILABLE DOCTORS** (with manual `[ Select ]` button)
-   - **UNAVAILABLE DOCTORS** (with refusal reasons)
-5. Staff manually selects an available doctor (NO automatic assignment).
-6. Staff clicks **Book Appointment**.
-7. Backend performs final authoritative validation check before saving.
-8. Appointment is committed to database and doctor's schedule updates in real-time.
+### 1. Doctor Availability Rules
+A doctor is considered **AVAILABLE** only if ALL 5 conditions are met:
+1. **Doctor exists**
+2. **Doctor status** is `Available`
+3. **Working days:** Target date falls within doctor's working days (`is_doctor_working_on_date`).
+4. **Working hours:** Target time is within working hours (`start_time <= target_time < end_time`).
+5. **No conflicting booking:** Doctor does not already have a `Scheduled` appointment at that exact date and time.
+   - `Scheduled` appointments block availability.
+   - `Completed` and `Cancelled` appointments do NOT block availability.
+
+If any condition fails, doctor is returned under `unavailable_doctors` with a precise reason:
+- *"Doctor is not working on this day."*
+- *"Outside doctor's working hours."*
+- *"Already booked at this time."*
+- *"Doctor is marked unavailable."*
+
+### 2. Automatic Doctor Assignment Engine
+When multiple doctors are available for an appointment slot, the system can automatically suggest the best doctor using deterministic workload balancing:
+- **Workload Formula:** Counts ONLY active appointments (`status == "Scheduled"`) for that doctor on the specified date (`Completed` and `Cancelled` appointments do not count).
+- **Selection Rule:** Selects the available doctor with the lowest active scheduled appointment workload.
+- **Deterministic Tie-Breaker:** If two or more available doctors have the identical lowest workload, the tie is broken by lowest doctor ID (`doctor.id`).
+- **Explicit User Confirmation:** Auto-assignment presents a **Suggested Assignment** card with doctor details, working hours, active appointment count, and explanation reason. The appointment is NOT created until the staff explicitly clicks **[ Confirm Appointment ]**.
+- **Manual Override:** Staff can at any time click **[ Choose Another Doctor ]** or manually select any available doctor card.
+- **Final Validation & Race Condition Protection:** When `POST /api/appointments/` is submitted, backend re-checks `check_doctor_availability()`. If another user booked the slot in the meantime, the booking is rejected with HTTP 400 and a descriptive message naming the doctor.
 
 ---
 
@@ -171,10 +185,11 @@ If any condition fails, doctor is returned under `unavailable_doctors` with a pr
 - `GET  /api/doctors/{id}`             → get doctor details
 - `PATCH /api/doctors/{id}`            → update doctor info / status
 - `DELETE /api/doctors/{id}`           → delete doctor
-- `GET  /api/doctors/available?date=...&time=...` → returns `{ available_doctors: [...], unavailable_doctors: [...] }`
+- `GET  /api/doctors/available?date=...&time=...` → returns `{ available_doctors: [...], unavailable_doctors: [...] }` (with `appointments_today` workload count per available doctor)
 - `GET  /api/doctors/{id}/schedule?date=...`     → doctor schedule slots
 - `POST /api/patients/`                → create patient
 - `GET  /api/patients/?search=...`     → list + search
+- `POST /api/appointments/auto-assign` → deterministic workload-balanced doctor assignment `{ doctor: {...}, appointments_today: N, reason: "..." }`
 - `POST /api/appointments/`            → book appointment with optional doctor assignment & final validation
 - `GET  /api/appointments/?date_filter=&status=&severity=&doctor_id=` → list filtered
 - `GET  /api/appointments/followups?upcoming_days=` → list pending follow-ups
@@ -212,7 +227,9 @@ If any condition fails, doctor is returned under `unavailable_doctors` with a pr
 - [x] All 7 tables + 8 API routers
 - [x] Doctor availability engine returning categorized available & unavailable doctors with exact reasons
 - [x] Scheduled appointments block availability; Completed and Cancelled do not
-- [x] Frontend booking modal with [ Check Doctor Availability ] button and manual doctor selection
-- [x] Authoritative backend validation on appointment creation
-- [x] 22/22 automated test assertions passing across all 9 specified test scenarios
+- [x] Automatic Doctor Assignment engine with deterministic workload balancing (`POST /api/appointments/auto-assign`)
+- [x] Frontend booking modal with [ Check Availability ], [ Auto Assign Doctor ], Suggested Assignment card, and manual doctor selection
+- [x] Workload count displayed on each available doctor card (`X booked today`)
+- [x] Authoritative backend validation on appointment creation preventing race conditions
+- [x] 38/38 automated test assertions passing across all 18 test scenarios (Availability + Auto-Assignment)
 - [x] Production build passing (0 errors)

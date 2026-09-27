@@ -49,6 +49,7 @@ class AvailableDoctorItem(BaseModel):
     working_hours: Optional[str] = None
     status: Optional[str] = "Available"
     available: bool = True
+    appointments_today: Optional[int] = 0
 
     class Config:
         from_attributes = True

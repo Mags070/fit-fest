@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, CheckCircle, Filter, UserCheck, Clock, Check, X, AlertTriangle, Calendar as CalendarIcon } from 'lucide-react'
+import { Plus, CheckCircle, Filter, UserCheck, Clock, Check, X, AlertTriangle, Calendar as CalendarIcon, Sparkles } from 'lucide-react'
 import {
   getAppointments, createAppointment, updateApptStatus,
-  deleteAppointment, getPatients, getDoctors, getAvailableDoctors
+  deleteAppointment, getPatients, getDoctors, getAvailableDoctors, autoAssignDoctor
 } from '../services/api'
 import Modal from '../components/Modal'
 import { Badge } from '../components/Badge'
@@ -46,9 +46,11 @@ export default function Appointments() {
   const [filterDoctor, setFilterDoctor]     = useState('')
   const [filterDate, setFilterDate]         = useState(initialDate)
 
-  // Availability Check State in Modal
+  // Availability & Auto-Assignment State in Modal
   const [availabilityData, setAvailabilityData] = useState(null) // { available_doctors: [], unavailable_doctors: [] }
   const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [autoAssigning, setAutoAssigning] = useState(false)
+  const [autoAssignment, setAutoAssignment] = useState(null)
   const [availabilityError, setAvailabilityError] = useState(null)
 
   const fetchAll = () => {
@@ -75,6 +77,7 @@ export default function Appointments() {
   const openBookModal = () => {
     setForm(emptyForm)
     setAvailabilityData(null)
+    setAutoAssignment(null)
     setAvailabilityError(null)
     setShowModal(true)
   }
@@ -108,6 +111,7 @@ export default function Appointments() {
         const stillAvail = res.data.available_doctors?.some(d => d.id === parseInt(form.doctor_id))
         if (!stillAvail) {
           setForm(prev => ({ ...prev, doctor_id: '' }))
+          setAutoAssignment(null)
         }
       }
     } catch (err) {
@@ -118,12 +122,61 @@ export default function Appointments() {
     }
   }
 
+  const handleAutoAssign = async () => {
+    setAvailabilityError(null)
+
+    if (!form.appointment_date) {
+      setAvailabilityError('Please select an appointment date.')
+      return
+    }
+    if (!form.appointment_time) {
+      setAvailabilityError('Please select an appointment time.')
+      return
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    if (form.appointment_date < todayStr) {
+      setAvailabilityError('Please select today or a future date.')
+      return
+    }
+
+    setAutoAssigning(true)
+    try {
+      const res = await autoAssignDoctor({
+        patient_id: form.patient_id ? parseInt(form.patient_id) : undefined,
+        appointment_date: form.appointment_date,
+        appointment_time: form.appointment_time,
+        reason: form.reason
+      })
+
+      setForm(prev => ({ ...prev, doctor_id: res.data.doctor.id }))
+      setAutoAssignment(res.data)
+
+      // Also refresh available doctors list in background
+      try {
+        const availRes = await getAvailableDoctors(form.appointment_date, form.appointment_time)
+        setAvailabilityData(availRes.data)
+      } catch {
+        // secondary catch
+      }
+    } catch (err) {
+      setAvailabilityError(err.response?.data?.detail || 'No doctors are available for the selected date and time.')
+      setAutoAssignment(null)
+    } finally {
+      setAutoAssigning(false)
+    }
+  }
+
   const handleSelectDoctor = (doc) => {
     setForm(prev => ({ ...prev, doctor_id: doc.id }))
+    if (autoAssignment && autoAssignment.doctor?.id !== doc.id) {
+      setAutoAssignment(null)
+    }
   }
 
   const handleDeselectDoctor = () => {
     setForm(prev => ({ ...prev, doctor_id: '' }))
+    setAutoAssignment(null)
   }
 
   const handleSubmit = async (e) => {
@@ -346,7 +399,7 @@ export default function Appointments() {
             <>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-                {saving ? 'Booking…' : 'Book Appointment'}
+                {saving ? 'Booking…' : (form.doctor_id ? 'Confirm Appointment' : 'Book Appointment')}
               </button>
             </>
           }
@@ -379,6 +432,7 @@ export default function Appointments() {
                   onChange={e => {
                     setForm({ ...form, appointment_date: e.target.value })
                     setAvailabilityData(null)
+                    setAutoAssignment(null)
                   }}
                   required
                 />
@@ -394,23 +448,36 @@ export default function Appointments() {
                   onChange={e => {
                     setForm({ ...form, appointment_time: e.target.value })
                     setAvailabilityData(null)
+                    setAutoAssignment(null)
                   }}
                   required
                 />
               </div>
 
-              {/* Check Doctor Availability Button */}
+              {/* Check Doctor Availability & Auto-Assign Actions */}
               <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={handleCheckAvailability}
-                  disabled={checkingAvailability}
-                >
-                  <UserCheck size={16} />
-                  {checkingAvailability ? 'Checking Availability…' : 'Check Doctor Availability'}
-                </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ justifyContent: 'center', height: 38 }}
+                    onClick={handleCheckAvailability}
+                    disabled={checkingAvailability || autoAssigning}
+                  >
+                    <UserCheck size={16} />
+                    {checkingAvailability ? 'Checking…' : 'Check Availability'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ justifyContent: 'center', height: 38, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}
+                    onClick={handleAutoAssign}
+                    disabled={autoAssigning || checkingAvailability}
+                  >
+                    <Sparkles size={16} />
+                    {autoAssigning ? 'Auto-Assigning…' : 'Auto Assign Doctor'}
+                  </button>
+                </div>
 
                 {availabilityError && (
                   <div style={{
@@ -423,13 +490,61 @@ export default function Appointments() {
                 )}
               </div>
 
-              {/* Selected Doctor Indicator */}
-              {selectedDoctorObj && (
+              {/* Suggested / Automatic Assignment Card */}
+              {autoAssignment && (
+                <div className="auto-assign-banner">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <div className="auto-assign-badge">
+                        <Sparkles size={13} /> Suggested Assignment
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--foreground)' }}>
+                          {autoAssignment.doctor.name}
+                        </span>
+                        <span style={{ fontSize: 12.5, color: 'var(--muted-foreground)' }}>
+                          {autoAssignment.doctor.specialization}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 2 }}>
+                        Hours: {autoAssignment.doctor.working_hours}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                        <span className="workload-tag">
+                          <Clock size={12} />
+                          {autoAssignment.appointments_today === 0
+                            ? '0 active appointments today'
+                            : `${autoAssignment.appointments_today} active appointment${autoAssignment.appointments_today > 1 ? 's' : ''} today`}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 500 }}>
+                          • {autoAssignment.reason}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}
+                      onClick={handleDeselectDoctor}
+                    >
+                      Choose Another Doctor
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Selected Doctor Indicator (Manual) */}
+              {!autoAssignment && selectedDoctorObj && (
                 <div className="doctor-selected-banner">
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Selected Doctor</div>
                     <div className="text-bold" style={{ fontSize: 14 }}>{selectedDoctorObj.name}</div>
                     <div className="text-muted" style={{ fontSize: 12 }}>{selectedDoctorObj.specialization}</div>
+                    {selectedDoctorObj.appointments_today !== undefined && (
+                      <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>
+                        {selectedDoctorObj.appointments_today} active appointments today
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -481,6 +596,12 @@ export default function Appointments() {
                                 <div className="doc-spec-avail" style={{ marginTop: 2 }}>{doc.specialization}</div>
                                 <div className="doc-time-avail" style={{ marginTop: 4 }}>
                                   {doc.working_hours || `${doc.start_time} - ${doc.end_time}`}
+                                </div>
+                                <div className="doc-workload-tag" style={{ marginTop: 6 }}>
+                                  <Clock size={11} />
+                                  {doc.appointments_today === 0
+                                    ? '0 booked today'
+                                    : `${doc.appointments_today} booked today`}
                                 </div>
                               </div>
                               <button

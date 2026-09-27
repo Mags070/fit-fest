@@ -160,6 +160,11 @@ def get_available_doctors(
         is_avail, reason = check_doctor_availability(d, target_date, valid_time_str, db)
 
         if is_avail:
+            active_count = db.query(Appointment).filter(
+                Appointment.doctor_id == d.id,
+                Appointment.appointment_date == date_str,
+                Appointment.status == "Scheduled"
+            ).count()
             available_list.append(AvailableDoctorItem(
                 id=d.id,
                 name=d.name,
@@ -170,7 +175,8 @@ def get_available_doctors(
                 end_time=d.end_time,
                 working_hours=hours_display,
                 status=d.status,
-                available=True
+                available=True,
+                appointments_today=active_count
             ))
         else:
             unavailable_list.append(UnavailableDoctorItem(

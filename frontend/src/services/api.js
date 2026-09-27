@@ -35,6 +35,7 @@ export const updateApptFollowup = (id, data) => api.patch(`/api/appointments/${i
 export const deleteAppointment  = (id) => api.delete(`/api/appointments/${id}`)
 export const getPatientHistory  = (patientId) => api.get(`/api/appointments/history/${patientId}`)
 export const getFollowups       = (days = 30) => api.get(`/api/appointments/followups?upcoming_days=${days}`)
+export const autoAssignDoctor   = (data) => api.post('/api/appointments/auto-assign', data)
 
 // ─── Ambulance requests ───────────────────────────────────────────────────────
 export const getAmbulance          = (params = {}) => api.get('/api/ambulance/', { params })

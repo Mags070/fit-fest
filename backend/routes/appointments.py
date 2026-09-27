@@ -8,9 +8,10 @@ from models.patient import Patient
 from models.doctor import Doctor
 from schemas.appointment import (
     AppointmentCreate, AppointmentStatusUpdate,
-    AppointmentFollowUpUpdate, AppointmentResponse
+    AppointmentFollowUpUpdate, AppointmentResponse,
+    AutoAssignRequest, AutoAssignResponse, AutoAssignDoctorInfo
 )
-from routes.doctors import is_doctor_working_on_date, check_doctor_availability
+from routes.doctors import is_doctor_working_on_date, check_doctor_availability, format_time_12h
 
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
 
@@ -57,7 +58,7 @@ def create_appointment(appt: AppointmentCreate, db: Session = Depends(get_db)):
         if not is_avail:
             raise HTTPException(
                 status_code=400,
-                detail=f"Doctor is no longer available for this time ({reason}). Please select another doctor."
+                detail=f"{doctor.name} is no longer available for this time ({reason}). Please select another doctor."
             )
 
     db_appt = Appointment(**appt.model_dump())
@@ -66,6 +67,74 @@ def create_appointment(appt: AppointmentCreate, db: Session = Depends(get_db)):
     db.refresh(db_appt)
     db_appt = db.query(Appointment).filter(Appointment.id == db_appt.id).first()
     return enrich_appointment(db_appt)
+
+
+@router.post("/auto-assign", response_model=AutoAssignResponse)
+def auto_assign_doctor(req: AutoAssignRequest, db: Session = Depends(get_db)):
+    """Automatically selects an available doctor with lowest active appointment workload."""
+    # 1. Date validation
+    if not req.appointment_date or not req.appointment_date.strip():
+        raise HTTPException(status_code=400, detail="Please select an appointment date.")
+    try:
+        target_date = datetime.strptime(req.appointment_date.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Expected YYYY-MM-DD.")
+    if target_date < date.today():
+        raise HTTPException(status_code=400, detail="Please select today or a future date.")
+
+    # 2. Time validation
+    if not req.appointment_time or not req.appointment_time.strip():
+        raise HTTPException(status_code=400, detail="Please select an appointment time.")
+    try:
+        datetime.strptime(req.appointment_time.strip(), "%H:%M")
+        valid_time_str = req.appointment_time.strip()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid time format. Expected HH:MM.")
+
+    # 3. Optional patient validation if patient_id provided
+    if req.patient_id is not None:
+        patient = db.query(Patient).filter(Patient.id == req.patient_id).first()
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+
+    # 4. Check doctor availability using existing logic
+    doctors = db.query(Doctor).all()
+    available_candidates = []
+    target_date_str = target_date.isoformat()
+
+    for d in doctors:
+        is_avail, _ = check_doctor_availability(d, target_date, valid_time_str, db)
+        if is_avail:
+            workload = db.query(Appointment).filter(
+                Appointment.doctor_id == d.id,
+                Appointment.appointment_date == target_date_str,
+                Appointment.status == "Scheduled"
+            ).count()
+            available_candidates.append((workload, d))
+
+    if not available_candidates:
+        raise HTTPException(status_code=400, detail="No doctors are available for the selected date and time.")
+
+    # Deterministic tie-breaker: sort by lowest workload, then lower doctor ID
+    available_candidates.sort(key=lambda item: (item[0], item[1].id))
+    lowest_workload, chosen_doctor = available_candidates[0]
+
+    hours_display = f"{format_time_12h(chosen_doctor.start_time)} - {format_time_12h(chosen_doctor.end_time)}"
+
+    return AutoAssignResponse(
+        doctor=AutoAssignDoctorInfo(
+            id=chosen_doctor.id,
+            name=chosen_doctor.name,
+            specialization=chosen_doctor.specialization,
+            phone=chosen_doctor.phone,
+            working_hours=hours_display,
+            available_days=chosen_doctor.available_days,
+            status=chosen_doctor.status
+        ),
+        appointments_today=lowest_workload,
+        reason="Lowest current appointment workload among available doctors."
+    )
+
 
 
 @router.get("/", response_model=List[AppointmentResponse])

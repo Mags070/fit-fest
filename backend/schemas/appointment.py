@@ -44,3 +44,30 @@ class AppointmentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AutoAssignRequest(BaseModel):
+    patient_id: Optional[int] = None
+    appointment_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    appointment_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    reason: Optional[str] = None
+
+
+class AutoAssignDoctorInfo(BaseModel):
+    id: int
+    name: str
+    specialization: str
+    phone: Optional[str] = None
+    working_hours: Optional[str] = None
+    available_days: Optional[str] = None
+    status: Optional[str] = "Available"
+
+    class Config:
+        from_attributes = True
+
+
+class AutoAssignResponse(BaseModel):
+    doctor: AutoAssignDoctorInfo
+    appointments_today: int
+    reason: str
+

@@ -1511,6 +1511,55 @@ tbody tr:last-child td {
   align-items: center;
 }
 
+/* Auto Assign Banner */
+.auto-assign-banner {
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%);
+  border: 1.5px solid var(--primary);
+  border-radius: 8px;
+  position: relative;
+}
+
+.auto-assign-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  background-color: var(--primary-light);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.workload-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background-color: var(--secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.doc-workload-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background-color: var(--secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
 .doctor-card-box {
   padding: 10px 12px;
   border-radius: 8px;
