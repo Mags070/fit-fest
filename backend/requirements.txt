@@ -1,0 +1,6 @@
+fastapi>=0.116.0
+uvicorn[standard]>=0.37.0
+sqlalchemy==2.0.35
+pydantic>=2.11.0
+python-dateutil==2.9.0
+aiofiles>=23.0.0

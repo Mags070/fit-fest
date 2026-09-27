@@ -1,0 +1,13 @@
+# Healthcare Coordinator — .gitignore
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite3
+.env
+.venv/
+venv/
+node_modules/
+dist/
+.DS_Store
+*.log
+healthcare.db
